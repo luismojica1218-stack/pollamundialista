@@ -125,3 +125,60 @@ async def save_prediccion(input_data: PredictionInput, user=Depends(get_current_
         raise he
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al guardar predicción: {str(e)}")
+
+# Request model para predicciones de torneo
+class TournamentPredictionInput(BaseModel):
+    campeon: Optional[str] = None
+    mejor_jugador: Optional[str] = None
+
+# 4. Obtener predicción de torneo del usuario autenticado
+@app.get("/api/predicciones-torneo")
+async def get_predicciones_torneo(user=Depends(get_current_user)):
+    try:
+        res = supabase.table("predicciones_torneo").select("*").eq("usuario_id", user.id).execute()
+        if res.data:
+            return res.data[0]
+        return {
+            "usuario_id": user.id,
+            "campeon": None,
+            "mejor_jugador": None,
+            "puntos_obtenidos": 0
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al obtener predicción de torneo: {str(e)}")
+
+# 5. Guardar predicción de torneo (campeón y mejor jugador)
+@app.put("/api/predicciones-torneo")
+async def save_predicciones_torneo(input_data: TournamentPredictionInput, user=Depends(get_current_user)):
+    try:
+        # Calcular fecha límite: menor inicio_utc de los partidos con fase != 'grupos'
+        res_matches = supabase.table("partidos").select("inicio_utc").neq("fase", "grupos").order("inicio_utc").limit(1).execute()
+        
+        if res_matches.data:
+            deadline = isoparse(res_matches.data[0]["inicio_utc"])
+        else:
+            # Fallback si no hay partidos de eliminatoria cargados: fin del primer partido del torneo + 16 días
+            # o una fecha estimativa como 2026-06-27 21:00:00 UTC
+            deadline = datetime(2026, 6, 27, 21, 0, 0, tzinfo=timezone.utc)
+            
+        now = datetime.now(timezone.utc)
+        if now >= deadline:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Las predicciones del torneo están cerradas. La fecha límite de edición era {deadline.strftime('%Y-%m-%d %H:%M:%S')} UTC."
+            )
+            
+        payload = {
+            "usuario_id": user.id,
+            "campeon": input_data.campeon,
+            "mejor_jugador": input_data.mejor_jugador,
+            "actualizado_en": datetime.now(timezone.utc).isoformat()
+        }
+        
+        res_torneo = supabase.table("predicciones_torneo").upsert(payload).execute()
+        return res_torneo.data[0] if res_torneo.data else {"status": "saved"}
+        
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al guardar predicción de torneo: {str(e)}")
