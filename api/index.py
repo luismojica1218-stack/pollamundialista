@@ -314,3 +314,69 @@ async def sincronizar(date: Optional[str] = None, authorization: str = Header(No
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error en la sincronización: {str(e)}")
+
+# 7. Endpoint para obtener la tabla de posiciones (Leaderboard)
+@app.get("/api/leaderboard")
+async def get_leaderboard(user=Depends(get_current_user)):
+    try:
+        if not supabase:
+            raise HTTPException(status_code=500, detail="Supabase no está configurado en el servidor")
+            
+        # Obtener perfiles, partidos finalizados, predicciones y predicciones de torneo
+        res_perfiles = supabase.table("perfiles").select("id, nombre_visible").execute()
+        res_partidos = supabase.table("partidos").select("id, goles_local, goles_visitante, estado").eq("estado", "finalizado").execute()
+        res_preds = supabase.table("predicciones").select("usuario_id, partido_id, pred_local, pred_visitante, puntos_obtenidos").execute()
+        res_torneo = supabase.table("predicciones_torneo").select("usuario_id, puntos_obtenidos").execute()
+        
+        perfiles = res_perfiles.data or []
+        preds = res_preds.data or []
+        torneos = res_torneo.data or []
+        partidos_finalizados = res_partidos.data or []
+        
+        # Mapear datos para búsqueda rápida
+        partidos_map = {p["id"]: p for p in partidos_finalizados}
+        torneos_map = {t["usuario_id"]: t["puntos_obtenidos"] for t in torneos}
+        
+        # Agrupar predicciones por usuario
+        user_preds = {}
+        for p in preds:
+            u_id = p["usuario_id"]
+            if u_id not in user_preds:
+                user_preds[u_id] = []
+            user_preds[u_id].append(p)
+            
+        leaderboard = []
+        for perf in perfiles:
+            u_id = perf["id"]
+            nombre = perf["nombre_visible"]
+            
+            puntos_partidos = 0
+            marcadores_exactos = 0
+            
+            u_preds = user_preds.get(u_id, [])
+            for pred in u_preds:
+                puntos_partidos += pred["puntos_obtenidos"]
+                
+                # Contar marcadores exactos en partidos ya finalizados
+                p_id = pred["partido_id"]
+                if p_id in partidos_map:
+                    match = partidos_map[p_id]
+                    if pred["pred_local"] == match["goles_local"] and pred["pred_visitante"] == match["goles_visitante"]:
+                        marcadores_exactos += 1
+                        
+            puntos_torneo = torneos_map.get(u_id, 0)
+            puntos_totales = puntos_partidos + puntos_torneo
+            
+            leaderboard.append({
+                "usuario_id": u_id,
+                "nombre_visible": nombre,
+                "puntos_totales": puntos_totales,
+                "marcadores_exactos": marcadores_exactos
+            })
+            
+        # Ordenar por puntos totales desc, luego por marcadores exactos desc
+        leaderboard.sort(key=lambda x: (x["puntos_totales"], x["marcadores_exactos"]), reverse=True)
+        
+        return leaderboard
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al calcular la tabla de posiciones: {str(e)}")
