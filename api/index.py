@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dateutil.parser import isoparse
 from supabase import create_client, Client
-from puntuacion import calcular_puntos
+from puntuacion import calcular_puntos, calcular_puntos_torneo
 
 app = FastAPI(title="El Ático - API", docs_url="/api/docs", openapi_url="/api/openapi.json")
 
@@ -380,3 +380,246 @@ async def get_leaderboard(user=Depends(get_current_user)):
         return leaderboard
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al calcular la tabla de posiciones: {str(e)}")
+
+# Request Models para Admin
+class AdminMatchResultInput(BaseModel):
+    partido_id: int
+    goles_local: Optional[int] = None
+    goles_visitante: Optional[int] = None
+    estado: str # 'programado', 'en_juego', 'finalizado'
+
+class AdminRecalculateInput(BaseModel):
+    partido_id: int
+
+class AdminFinalizeTournamentInput(BaseModel):
+    campeon_real: str
+    mejor_jugador_real: str
+
+# 8. Guard para validar que el usuario es administrador
+async def require_admin(user=Depends(get_current_user)):
+    profile = await get_profile(user.id)
+    if not profile or not profile.get("es_admin"):
+        raise HTTPException(
+            status_code=403, 
+            detail="No autorizado: Se requiere rol de administrador"
+        )
+    return user
+
+# 9. Modificación manual de resultado de un partido
+@app.put("/api/admin/resultado", dependencies=[Depends(require_admin)])
+async def admin_save_resultado(input_data: AdminMatchResultInput):
+    try:
+        # Obtener datos anteriores del partido
+        res_match = supabase.table("partidos").select("*").eq("id", input_data.partido_id).single().execute()
+        match = res_match.data
+        if not match:
+            raise HTTPException(status_code=404, detail="Partido no encontrado")
+
+        # Actualizar partido
+        payload = {
+            "estado": input_data.estado,
+            "goles_local": input_data.goles_local if input_data.estado == "finalizado" else None,
+            "goles_visitante": input_data.goles_visitante if input_data.estado == "finalizado" else None
+        }
+        
+        supabase.table("partidos").update(payload).eq("id", input_data.partido_id).execute()
+
+        # Si el partido se marca como finalizado, recalcular puntos de las predicciones
+        recalculados = 0
+        if input_data.estado == "finalizado" and input_data.goles_local is not None and input_data.goles_visitante is not None:
+            res_preds = supabase.table("predicciones").select("*").eq("partido_id", input_data.partido_id).execute()
+            preds = res_preds.data or []
+            
+            for pred in preds:
+                puntos = calcular_puntos(
+                    pred_local=pred["pred_local"],
+                    pred_visitante=pred["pred_visitante"],
+                    real_local=input_data.goles_local,
+                    real_visitante=input_data.goles_visitante,
+                    fase=match["fase"]
+                )
+                supabase.table("predicciones").update({"puntos_obtenidos": puntos}).eq("id", pred["id"]).execute()
+                recalculados += 1
+                
+        return {
+            "status": "success",
+            "message": "Partido actualizado correctamente",
+            "predicciones_recalculadas": recalculados
+        }
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error en panel de administración: {str(e)}")
+
+# 10. Recalcular puntos de un partido manualmente
+@app.post("/api/admin/recalcular", dependencies=[Depends(require_admin)])
+async def admin_recalcular_partido(input_data: AdminRecalculateInput):
+    try:
+        res_match = supabase.table("partidos").select("*").eq("id", input_data.partido_id).single().execute()
+        match = res_match.data
+        if not match:
+            raise HTTPException(status_code=404, detail="Partido no encontrado")
+            
+        if match["estado"] != "finalizado" or match["goles_local"] is None or match["goles_visitante"] is None:
+            raise HTTPException(status_code=400, detail="El partido no está finalizado o no tiene goles cargados")
+
+        res_preds = supabase.table("predicciones").select("*").eq("partido_id", input_data.partido_id).execute()
+        preds = res_preds.data or []
+        
+        for pred in preds:
+            puntos = calcular_puntos(
+                pred_local=pred["pred_local"],
+                pred_visitante=pred["pred_visitante"],
+                real_local=match["goles_local"],
+                real_visitante=match["goles_visitante"],
+                fase=match["fase"]
+            )
+            supabase.table("predicciones").update({"puntos_obtenidos": puntos}).eq("id", pred["id"]).execute()
+            
+        return {
+            "status": "success",
+            "message": "Recálculo manual finalizado",
+            "predicciones_recalculadas": len(preds)
+        }
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al recalcular partido: {str(e)}")
+
+# 11. Fijar campeón y mejor jugador reales + recalcular predicciones de torneo
+@app.post("/api/admin/finalizar-torneo", dependencies=[Depends(require_admin)])
+async def admin_finalize_tournament(input_data: AdminFinalizeTournamentInput):
+    try:
+        # Obtener todas las predicciones de torneo
+        res_torneos = supabase.table("predicciones_torneo").select("*").execute()
+        preds_torneo = res_torneos.data or []
+        
+        recalculados = 0
+        for pred in preds_torneo:
+            puntos = calcular_puntos_torneo(
+                pred_campeon=pred["campeon"],
+                real_campeon=input_data.campeon_real,
+                pred_jugador=pred["mejor_jugador"],
+                real_jugador=input_data.mejor_jugador_real
+            )
+            
+            supabase.table("predicciones_torneo").update({
+                "puntos_obtenidos": puntos
+            }).eq("usuario_id", pred["usuario_id"]).execute()
+            
+            recalculados += 1
+            
+        return {
+            "status": "success",
+            "message": "Torneo finalizado y puntos del bonus de torneo calculados con éxito",
+            "predicciones_torneo_actualizadas": recalculados
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al finalizar torneo: {str(e)}")
+
+# 12. Forzar sincronización manual de ESPN desde el panel de admin
+@app.post("/api/admin/sincronizar", dependencies=[Depends(require_admin)])
+async def admin_sincronizar_manual(date: Optional[str] = None):
+    try:
+        # Reutilizamos el proceso llamando directamente la lógica de sincronización
+        # Simulamos que tenemos el secreto correcto
+        dates_to_sync = []
+        if date:
+            dates_to_sync = [date]
+        else:
+            now = datetime.now(timezone.utc)
+            dates_to_sync = [
+                (now - timedelta(days=1)).strftime("%Y%m%d"),
+                now.strftime("%Y%m%d")
+            ]
+
+        partidos_actualizados = []
+        total_recalculados = 0
+
+        for d_str in dates_to_sync:
+            url = f"https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates={d_str}"
+            response = httpx.get(url)
+            if response.status_code != 200:
+                continue
+                
+            data = response.json()
+            events = data.get("events", [])
+            
+            for event in events:
+                event_id = event.get("id")
+                espn_state = event.get("status", {}).get("type", {}).get("state", "pre")
+                
+                if espn_state != "post":
+                    continue
+                    
+                competitions = event.get("competitions", [])
+                if not competitions:
+                    continue
+                    
+                competitors = competitions[0].get("competitors", [])
+                if len(competitors) < 2:
+                    continue
+                
+                goles_local = None
+                goles_visitante = None
+                
+                for comp in competitors:
+                    role = comp.get("homeAway")
+                    score_str = comp.get("score")
+                    
+                    if role == "home" and score_str is not None:
+                        goles_local = int(score_str)
+                    elif role == "away" and score_str is not None:
+                        goles_visitante = int(score_str)
+
+                if goles_local is None or goles_visitante is None:
+                    continue
+
+                res_match = supabase.table("partidos").select("*").eq("espn_event_id", event_id).execute()
+                if not res_match.data:
+                    continue
+                    
+                db_match = res_match.data[0]
+                
+                necesita_actualizacion = (
+                    db_match["estado"] != "finalizado" or
+                    db_match["goles_local"] != goles_local or
+                    db_match["goles_visitante"] != goles_visitante
+                )
+                
+                if necesita_actualizacion:
+                    supabase.table("partidos").update({
+                        "goles_local": goles_local,
+                        "goles_visitante": goles_visitante,
+                        "estado": "finalizado"
+                    }).eq("id", db_match["id"]).execute()
+                    
+                    res_preds = supabase.table("predicciones").select("*").eq("partido_id", db_match["id"]).execute()
+                    preds = res_preds.data or []
+                    
+                    for pred in preds:
+                        puntos = calcular_puntos(
+                            pred_local=pred["pred_local"],
+                            pred_visitante=pred["pred_visitante"],
+                            real_local=goles_local,
+                            real_visitante=goles_visitante,
+                            fase=db_match["fase"]
+                        )
+                        supabase.table("predicciones").update({
+                            "puntos_obtenidos": puntos
+                        }).eq("id", pred["id"]).execute()
+                        total_recalculados += 1
+                        
+                    partidos_actualizados.append({
+                        "partido": f"{db_match['equipo_local']} vs {db_match['equipo_visitante']}",
+                        "goles": f"{goles_local}-{goles_visitante}",
+                        "predicciones_actualizadas": len(preds)
+                    })
+                    
+        return {
+            "status": "success",
+            "partidos_actualizados": partidos_actualizados,
+            "total_predicciones_recalculadas": total_recalculados
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error en la sincronización manual: {str(e)}")
