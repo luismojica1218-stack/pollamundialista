@@ -8,6 +8,7 @@ import { ShieldCheck, RefreshCw, Play, Save, CheckCircle, AlertTriangle, Calenda
 
 interface Partido {
   id: number;
+  espn_event_id: string;
   equipo_local: string;
   equipo_visitante: string;
   fase: string;
