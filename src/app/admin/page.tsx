@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import AdminRoute from '@/components/AdminRoute';
 import NavBar from '@/components/NavBar';
-import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/AuthContext';
 import { ShieldCheck, RefreshCw, Play, Save, CheckCircle, AlertTriangle, CalendarDays, Award } from 'lucide-react';
 
 interface Partido {
@@ -39,6 +39,7 @@ const FASE_NAMES: { [key: string]: string } = {
 };
 
 export default function AdminPage() {
+  const { token } = useAuth();
   const [partidos, setPartidos] = useState<Partido[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -53,12 +54,9 @@ export default function AdminPage() {
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' | '' }>({ text: '', type: '' });
 
   const fetchData = useCallback(async () => {
+    if (!token) return;
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) return;
-
       const headers = { 'Authorization': `Bearer ${token}` };
       const res = await fetch('/api/partidos', { headers });
       
@@ -82,11 +80,13 @@ export default function AdminPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [token]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (token) {
+      fetchData();
+    }
+  }, [fetchData, token]);
 
   const handleScoreChange = (matchId: number, field: 'local' | 'visitante' | 'estado', val: string) => {
     setMatchScores(prev => ({
@@ -106,8 +106,11 @@ export default function AdminPage() {
     setMessage({ text: '', type: '' });
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
+      if (!token) {
+        setActionStates(prev => ({ ...prev, [`save-${matchId}`]: 'error' }));
+        setMessage({ text: 'No hay token de sesión válido.', type: 'error' });
+        return;
+      }
 
       const payload = {
         partido_id: matchId,
@@ -145,8 +148,11 @@ export default function AdminPage() {
     setMessage({ text: '', type: '' });
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
+      if (!token) {
+        setActionStates(prev => ({ ...prev, [`recalc-${matchId}`]: 'error' }));
+        setMessage({ text: 'No hay token de sesión válido.', type: 'error' });
+        return;
+      }
 
       const response = await fetch('/api/admin/recalcular', {
         method: 'POST',
@@ -176,8 +182,11 @@ export default function AdminPage() {
     setMessage({ text: '', type: '' });
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
+      if (!token) {
+        setMessage({ text: 'No hay token de sesión válido.', type: 'error' });
+        setSyncing(false);
+        return;
+      }
 
       const response = await fetch('/api/admin/sincronizar', {
         method: 'POST',
@@ -216,8 +225,11 @@ export default function AdminPage() {
     setMessage({ text: '', type: '' });
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
+      if (!token) {
+        setActionStates(prev => ({ ...prev, 'finalize': 'error' }));
+        setMessage({ text: 'No hay token de sesión válido.', type: 'error' });
+        return;
+      }
 
       const response = await fetch('/api/admin/finalizar-torneo', {
         method: 'POST',

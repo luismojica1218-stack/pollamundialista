@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import NavBar from '@/components/NavBar';
-import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/AuthContext';
 import { CalendarDays, Save, CheckCircle2, XCircle, AlertCircle, Clock, Trophy } from 'lucide-react';
 
 interface Partido {
@@ -40,6 +40,7 @@ const FASE_NAMES: { [key: string]: string } = {
 };
 
 export default function PrediccionesPage() {
+  const { token } = useAuth();
   const [partidos, setPartidos] = useState<Partido[]>([]);
   const [predicciones, setPredicciones] = useState<{ [partidoId: number]: Prediccion }>({});
   const [localScores, setLocalScores] = useState<{ [partidoId: number]: { local: string; visitante: string } }>({});
@@ -57,12 +58,9 @@ export default function PrediccionesPage() {
   }, []);
 
   const fetchData = useCallback(async () => {
+    if (!token) return;
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) return;
-
       const headers = { 'Authorization': `Bearer ${token}` };
 
       // Fetch matches and user predictions in parallel
@@ -97,11 +95,13 @@ export default function PrediccionesPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [token]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (token) {
+      fetchData();
+    }
+  }, [fetchData, token]);
 
   const handleScoreChange = (partidoId: number, team: 'local' | 'visitante', val: string) => {
     // Only allow positive digits
@@ -130,8 +130,10 @@ export default function PrediccionesPage() {
     setSavingStates(prev => ({ ...prev, [partidoId]: 'saving' }));
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
+      if (!token) {
+        setSavingStates(prev => ({ ...prev, [partidoId]: 'error' }));
+        return;
+      }
       
       const response = await fetch('/api/predicciones', {
         method: 'POST',
@@ -316,59 +318,138 @@ export default function PrediccionesPage() {
                             </span>
                           </div>
 
-                          {/* Middle row: Match teams and inputs */}
-                          <div className="flex items-center justify-between gap-4">
-                            {/* Local Team */}
-                            <div className="flex-1 text-right">
-                              <span className="font-semibold text-white block text-sm sm:text-base truncate">
-                                {partido.equipo_local}
-                              </span>
-                            </div>
+                          {/* ScoreController Helper component inside map */}
+                          {(() => {
+                            const ScoreController = ({
+                              partidoId,
+                              team,
+                              value,
+                              isClosed,
+                              isModified
+                            }: {
+                              partidoId: number;
+                              team: 'local' | 'visitante';
+                              value: string;
+                              isClosed: boolean;
+                              isModified: boolean;
+                            }) => {
+                              const handleStep = (amount: number) => {
+                                let current = parseInt(value, 10);
+                                if (isNaN(current)) current = 0;
+                                const nextVal = Math.max(0, current + amount).toString();
+                                handleScoreChange(partidoId, team, nextVal);
+                              };
 
-                            {/* Inputs / Score */}
-                            <div className="flex items-center gap-2 shrink-0">
-                              <input
-                                type="text"
-                                maxLength={2}
-                                disabled={isClosed}
-                                value={localVal}
-                                onChange={(e) => handleScoreChange(partido.id, 'local', e.target.value)}
-                                className={`w-12 h-12 text-center font-bold text-lg rounded-lg bg-slate-900/90 border transition-all focus:outline-none focus:ring-2 focus:ring-teal-500/50 ${
-                                  isClosed
-                                    ? 'border-slate-800 text-slate-500'
-                                    : isModified
-                                    ? 'border-teal-500 text-teal-400 ring-1 ring-teal-500/20'
-                                    : 'border-slate-800 text-white'
-                                }`}
-                                placeholder="-"
-                              />
-                              
-                              <span className="text-slate-600 font-bold">:</span>
-                              
-                              <input
-                                type="text"
-                                maxLength={2}
-                                disabled={isClosed}
-                                value={visitanteVal}
-                                onChange={(e) => handleScoreChange(partido.id, 'visitante', e.target.value)}
-                                className={`w-12 h-12 text-center font-bold text-lg rounded-lg bg-slate-900/90 border transition-all focus:outline-none focus:ring-2 focus:ring-teal-500/50 ${
-                                  isClosed
-                                    ? 'border-slate-800 text-slate-500'
-                                    : isModified
-                                    ? 'border-teal-500 text-teal-400 ring-1 ring-teal-500/20'
-                                    : 'border-slate-800 text-white'
-                                }`}
-                                placeholder="-"
-                              />
-                            </div>
+                              return (
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <button
+                                    type="button"
+                                    disabled={isClosed}
+                                    onClick={() => handleStep(-1)}
+                                    className="w-8 h-8 rounded-lg bg-slate-900 hover:bg-slate-800 active:scale-95 text-slate-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center border border-slate-800 text-lg font-bold select-none cursor-pointer"
+                                  >
+                                    -
+                                  </button>
+                                  <input
+                                    type="text"
+                                    maxLength={2}
+                                    disabled={isClosed}
+                                    value={value}
+                                    onChange={(e) => handleScoreChange(partidoId, team, e.target.value)}
+                                    className={`w-10 h-10 text-center font-bold text-base rounded-lg bg-slate-950/90 border transition-all focus:outline-none focus:ring-2 focus:ring-teal-500/50 ${
+                                      isClosed
+                                        ? 'border-slate-850 text-slate-500'
+                                        : isModified
+                                        ? 'border-teal-500 text-teal-400 ring-1 ring-teal-500/20'
+                                        : 'border-slate-800 text-white'
+                                    }`}
+                                    placeholder="-"
+                                  />
+                                  <button
+                                    type="button"
+                                    disabled={isClosed}
+                                    onClick={() => handleStep(1)}
+                                    className="w-8 h-8 rounded-lg bg-slate-900 hover:bg-slate-800 active:scale-95 text-slate-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center border border-slate-800 text-lg font-bold select-none cursor-pointer"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              );
+                            };
 
-                            {/* Visitante Team */}
-                            <div className="flex-1 text-left">
-                              <span className="font-semibold text-white block text-sm sm:text-base truncate">
-                                {partido.equipo_visitante}
-                              </span>
-                            </div>
-                          </div>
+                            return (
+                              <>
+                                {/* Desktop Layout */}
+                                <div className="hidden md:flex items-center justify-between gap-4">
+                                  {/* Local Team */}
+                                  <div className="flex-1 text-right">
+                                    <span className="font-semibold text-white block text-base truncate">
+                                      {partido.equipo_local}
+                                    </span>
+                                  </div>
+
+                                  {/* Inputs / Score */}
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <ScoreController
+                                      partidoId={partido.id}
+                                      team="local"
+                                      value={localVal}
+                                      isClosed={isClosed}
+                                      isModified={isModified}
+                                    />
+                                    
+                                    <span className="text-slate-600 font-bold px-1">:</span>
+                                    
+                                    <ScoreController
+                                      partidoId={partido.id}
+                                      team="visitante"
+                                      value={visitanteVal}
+                                      isClosed={isClosed}
+                                      isModified={isModified}
+                                    />
+                                  </div>
+
+                                  {/* Visitante Team */}
+                                  <div className="flex-1 text-left">
+                                    <span className="font-semibold text-white block text-base truncate">
+                                      {partido.equipo_visitante}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Mobile Layout */}
+                                <div className="flex flex-col gap-3 md:hidden">
+                                  {/* Local Row */}
+                                  <div className="flex items-center justify-between bg-slate-900/40 p-2.5 rounded-xl border border-slate-900">
+                                    <span className="font-semibold text-white text-sm truncate pr-2">
+                                      {partido.equipo_local}
+                                    </span>
+                                    <ScoreController
+                                      partidoId={partido.id}
+                                      team="local"
+                                      value={localVal}
+                                      isClosed={isClosed}
+                                      isModified={isModified}
+                                    />
+                                  </div>
+
+                                  {/* Visitante Row */}
+                                  <div className="flex items-center justify-between bg-slate-900/40 p-2.5 rounded-xl border border-slate-900">
+                                    <span className="font-semibold text-white text-sm truncate pr-2">
+                                      {partido.equipo_visitante}
+                                    </span>
+                                    <ScoreController
+                                      partidoId={partido.id}
+                                      team="visitante"
+                                      value={visitanteVal}
+                                      isClosed={isClosed}
+                                      isModified={isModified}
+                                    />
+                                  </div>
+                                </div>
+                              </>
+                            );
+                          })()}
 
                           {/* Bottom Row: Actions or match results */}
                           <div className="mt-4 pt-3 border-t border-slate-900/50 flex items-center justify-between text-xs">

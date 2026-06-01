@@ -1,10 +1,18 @@
+-- Limpiar tablas previas
+DROP TABLE IF EXISTS public.predicciones_torneo CASCADE;
+DROP TABLE IF EXISTS public.predicciones CASCADE;
+DROP TABLE IF EXISTS public.partidos CASCADE;
+DROP TABLE IF EXISTS public.perfiles CASCADE;
+
 -- Crear tabla perfiles
 CREATE TABLE IF NOT EXISTS public.perfiles (
-    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-    email TEXT,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    grupo_codigo TEXT NOT NULL,
     nombre_visible TEXT NOT NULL,
+    pin_hash TEXT NOT NULL,
     es_admin BOOLEAN DEFAULT false,
-    creado_en TIMESTAMPTZ DEFAULT now()
+    creado_en TIMESTAMPTZ DEFAULT now(),
+    UNIQUE (grupo_codigo, nombre_visible)
 );
 
 -- Crear tabla partidos
@@ -47,66 +55,8 @@ ALTER TABLE public.partidos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.predicciones ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.predicciones_torneo ENABLE ROW LEVEL SECURITY;
 
--- 1. Políticas para 'perfiles'
-CREATE POLICY "Permitir lectura a usuarios autenticados" ON public.perfiles
-    FOR SELECT TO authenticated USING (true);
-
-CREATE POLICY "Permitir actualización de perfil propio" ON public.perfiles
-    FOR UPDATE TO authenticated 
-    USING (auth.uid() = id)
-    WITH CHECK (auth.uid() = id AND es_admin = (SELECT es_admin FROM public.perfiles WHERE id = auth.uid()));
-
--- 2. Políticas para 'partidos'
-CREATE POLICY "Permitir lectura a usuarios autenticados" ON public.partidos
-    FOR SELECT TO authenticated USING (true);
-
-CREATE POLICY "Permitir gestión total a administradores" ON public.partidos
-    FOR ALL TO authenticated
-    USING (EXISTS (SELECT 1 FROM public.perfiles WHERE id = auth.uid() AND es_admin = true));
-
--- 3. Políticas para 'predicciones'
-CREATE POLICY "Permitir lectura de predicciones propias" ON public.predicciones
-    FOR SELECT TO authenticated
-    USING (auth.uid() = usuario_id);
-
-CREATE POLICY "Permitir inserción de predicciones propias" ON public.predicciones
-    FOR INSERT TO authenticated
-    WITH CHECK (auth.uid() = usuario_id);
-
-CREATE POLICY "Permitir actualización de predicciones propias" ON public.predicciones
-    FOR UPDATE TO authenticated
-    USING (auth.uid() = usuario_id)
-    WITH CHECK (auth.uid() = usuario_id);
-
--- 4. Políticas para 'predicciones_torneo'
-CREATE POLICY "Permitir lectura de predicciones torneo propias" ON public.predicciones_torneo
-    FOR SELECT TO authenticated
-    USING (auth.uid() = usuario_id);
-
-CREATE POLICY "Permitir inserción/actualización de predicciones torneo propias" ON public.predicciones_torneo
-    FOR ALL TO authenticated
-    USING (auth.uid() = usuario_id);
-
--- Crear disparador (trigger) para crear perfil al registrarse un usuario en auth.users
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS trigger AS $$
-BEGIN
-    INSERT INTO public.perfiles (id, email, nombre_visible, es_admin)
-    VALUES (
-        new.id,
-        new.email,
-        COALESCE(new.raw_user_meta_data->>'nombre_visible', split_part(new.email, '@', 1)),
-        false
-    );
-    
-    -- Crear también fila en predicciones_torneo por defecto
-    INSERT INTO public.predicciones_torneo (usuario_id, campeon, mejor_jugador, puntos_obtenidos)
-    VALUES (new.id, null, null, 0);
-
-    RETURN new;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-CREATE OR REPLACE TRIGGER on_auth_user_created
-    AFTER INSERT ON auth.users
-    FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+-- Políticas de Lectura Pública (Permite lectura y Realtime al frontend)
+CREATE POLICY "Permitir lectura publica de perfiles" ON public.perfiles FOR SELECT TO public USING (true);
+CREATE POLICY "Permitir lectura publica de partidos" ON public.partidos FOR SELECT TO public USING (true);
+CREATE POLICY "Permitir lectura publica de predicciones" ON public.predicciones FOR SELECT TO public USING (true);
+CREATE POLICY "Permitir lectura publica de predicciones_torneo" ON public.predicciones_torneo FOR SELECT TO public USING (true);

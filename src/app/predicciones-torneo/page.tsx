@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import NavBar from '@/components/NavBar';
-import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/AuthContext';
 import { Award, Save, CheckCircle2, AlertCircle, ShieldCheck, HelpCircle } from 'lucide-react';
 
 const SELECCIONES = [
@@ -25,6 +25,7 @@ interface PrediccionTorneo {
 }
 
 export default function PrediccionesTorneoPage() {
+  const { token } = useAuth();
   const [campeon, setCampeon] = useState<string>('');
   const [mejorJugador, setMejorJugador] = useState<string>('');
   const [dbPred, setDbPred] = useState<PrediccionTorneo | null>(null);
@@ -35,13 +36,10 @@ export default function PrediccionesTorneoPage() {
   const [errorMsg, setErrorMsg] = useState<string>('');
 
   const fetchData = useCallback(async () => {
+    if (!token) return;
     setLoading(true);
     setErrorMsg('');
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) return;
-
       const headers = { 'Authorization': `Bearer ${token}` };
 
       // Fetch user tournament predictions
@@ -75,18 +73,23 @@ export default function PrediccionesTorneoPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [token]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (token) {
+      fetchData();
+    }
+  }, [fetchData, token]);
 
   const handleSave = async () => {
     setSavingState('saving');
     setErrorMsg('');
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
+      if (!token) {
+        setErrorMsg('Error: Sesión no válida.');
+        setSavingState('error');
+        return;
+      }
 
       const response = await fetch('/api/predicciones-torneo', {
         method: 'PUT',

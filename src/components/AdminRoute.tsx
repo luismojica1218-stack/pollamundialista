@@ -5,18 +5,18 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 
 export default function AdminRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading, isAdmin } = useAuth();
+  const { profile, loading, isAdmin } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (!loading) {
-      if (!user) {
+      if (!profile) {
         router.push('/login');
       } else if (!isAdmin) {
         router.push('/predicciones');
       }
     }
-  }, [user, loading, isAdmin, router]);
+  }, [profile, loading, isAdmin, router]);
 
   if (loading) {
     return (
@@ -26,7 +26,7 @@ export default function AdminRoute({ children }: { children: React.ReactNode }) 
     );
   }
 
-  if (!user || !isAdmin) {
+  if (!profile || !isAdmin) {
     return null; // Will redirect in useEffect
   }
 

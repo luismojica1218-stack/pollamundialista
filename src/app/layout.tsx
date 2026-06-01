@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, Outfit } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
@@ -16,6 +16,14 @@ const outfit = Outfit({
 export const metadata: Metadata = {
   title: "El Ático — Polla Mundialista 2026",
   description: "Predice los partidos de la Copa Mundial FIFA 2026, suma puntos y compite en vivo con tus amigos.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

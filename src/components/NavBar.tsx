@@ -76,7 +76,7 @@ export default function NavBar() {
                   {profile.nombre_visible}
                 </span>
                 <span className="text-xs text-slate-500">
-                  {profile.email}
+                  Grupo: {profile.grupo_codigo}
                 </span>
               </div>
             )}
@@ -113,7 +113,7 @@ export default function NavBar() {
             {profile && (
               <div>
                 <p className="text-sm font-semibold text-white">{profile.nombre_visible}</p>
-                <p className="text-xs text-slate-500">{profile.email}</p>
+                <p className="text-xs text-slate-500">Grupo: {profile.grupo_codigo}</p>
               </div>
             )}
             <button

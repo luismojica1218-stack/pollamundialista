@@ -1,106 +1,145 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
-import { User } from '@supabase/supabase-js';
 
-interface Profile {
+export interface Profile {
   id: string;
-  email: string;
+  grupo_codigo: string;
   nombre_visible: string;
   es_admin: boolean;
-  creado_en: string;
+  creado_en?: string;
 }
 
 interface AuthContextType {
-  user: User | null;
   profile: Profile | null;
   loading: boolean;
   isAdmin: boolean;
-  signOut: () => Promise<void>;
+  token: string | null;
+  joinGroup: (groupCode: string, nickname: string, pin: string) => Promise<void>;
+  loginUser: (groupCode: string, nickname: string, pin: string) => Promise<void>;
+  signOut: () => void;
   refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
-  user: null,
   profile: null,
   loading: true,
   isAdmin: false,
-  signOut: async () => {},
+  token: null,
+  joinGroup: async () => {},
+  loginUser: async () => {},
+  signOut: () => {},
   refreshProfile: async () => {},
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = async (currentToken: string) => {
     try {
-      const { data, error } = await supabase
-        .from('perfiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
-      if (error) {
-        console.error('Error fetching profile:', error);
-        setProfile(null);
-      } else {
+      const response = await fetch('/api/auth/me', {
+        headers: {
+          'Authorization': `Bearer ${currentToken}`
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
         setProfile(data);
+        localStorage.setItem('polla_profile', JSON.stringify(data));
+      } else {
+        signOut();
       }
     } catch (e) {
-      console.error(e);
-      setProfile(null);
-    }
-  };
-
-  const refreshProfile = async () => {
-    if (user) {
-      await fetchProfile(user.id);
+      console.error('Error fetching profile:', e);
+      signOut();
     }
   };
 
   useEffect(() => {
-    // Check active session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      const currentUser = session?.user ?? null;
-      setUser(currentUser);
-      if (currentUser) {
-        fetchProfile(currentUser.id).finally(() => setLoading(false));
-      } else {
-        setProfile(null);
+    const savedToken = localStorage.getItem('polla_token');
+    const savedProfile = localStorage.getItem('polla_profile');
+
+    if (savedToken && savedProfile) {
+      setToken(savedToken);
+      try {
+        setProfile(JSON.parse(savedProfile));
+        fetchProfile(savedToken).finally(() => setLoading(false));
+      } catch (e) {
+        localStorage.removeItem('polla_profile');
         setLoading(false);
       }
-    });
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        const currentUser = session?.user ?? null;
-        setUser(currentUser);
-        if (currentUser) {
-          setLoading(true);
-          await fetchProfile(currentUser.id);
-          setLoading(false);
-        } else {
-          setProfile(null);
-          setLoading(false);
-        }
-      }
-    );
-
-    return () => {
-      subscription.unsubscribe();
-    };
+    } else {
+      setLoading(false);
+    }
   }, []);
 
-  const signOut = async () => {
+  const joinGroup = async (groupCode: string, nickname: string, pin: string) => {
     setLoading(true);
-    await supabase.auth.signOut();
-    setUser(null);
+    try {
+      const response = await fetch('/api/auth/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          grupo_codigo: groupCode,
+          nombre_visible: nickname,
+          pin
+        })
+      });
+      
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || 'Error al unirse al grupo');
+      }
+
+      setToken(data.token);
+      setProfile(data.profile);
+      localStorage.setItem('polla_token', data.token);
+      localStorage.setItem('polla_profile', JSON.stringify(data.profile));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loginUser = async (groupCode: string, nickname: string, pin: string) => {
+    setLoading(true);
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          grupo_codigo: groupCode,
+          nombre_visible: nickname,
+          pin
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || 'Error al iniciar sesión');
+      }
+
+      setToken(data.token);
+      setProfile(data.profile);
+      localStorage.setItem('polla_token', data.token);
+      localStorage.setItem('polla_profile', JSON.stringify(data.profile));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const signOut = () => {
+    setToken(null);
     setProfile(null);
-    setLoading(false);
+    localStorage.removeItem('polla_token');
+    localStorage.removeItem('polla_profile');
+  };
+
+  const refreshProfile = async () => {
+    if (token) {
+      await fetchProfile(token);
+    }
   };
 
   const isAdmin = profile?.es_admin || false;
@@ -108,10 +147,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   return (
     <AuthContext.Provider
       value={{
-        user,
         profile,
         loading,
         isAdmin,
+        token,
+        joinGroup,
+        loginUser,
         signOut,
         refreshProfile,
       }}

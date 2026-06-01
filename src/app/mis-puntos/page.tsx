@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import NavBar from '@/components/NavBar';
-import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/AuthContext';
 import { Trophy, Calendar, Star } from 'lucide-react';
 
 interface Partido {
@@ -35,18 +35,16 @@ const FASE_NAMES: { [key: string]: string } = {
 };
 
 export default function MisPuntosPage() {
+  const { token } = useAuth();
   const [partidos, setPartidos] = useState<Partido[]>([]);
   const [predicciones, setPredicciones] = useState<{ [partidoId: number]: Prediccion }>({});
   const [puntosTorneo, setPuntosTorneo] = useState<number>(0);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
+    if (!token) return;
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) return;
-
       const headers = { 'Authorization': `Bearer ${token}` };
 
       // Fetch matches, user predictions and tournament predictions
@@ -80,11 +78,13 @@ export default function MisPuntosPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [token]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (token) {
+      fetchData();
+    }
+  }, [fetchData, token]);
 
   const totalPartidosPuntos = Object.values(predicciones).reduce((acc, p) => acc + p.puntos_obtenidos, 0);
   const totalPuntos = totalPartidosPuntos + puntosTorneo;

@@ -32,7 +32,15 @@ supabase: Client = None
 if supabase_url and supabase_key:
     supabase = create_client(supabase_url, supabase_key)
 
-# Dependency to check user authentication using Supabase JWT
+from auth import hash_pin, verify_pin, create_session_token, verify_session_token
+
+class CurrentUser:
+    def __init__(self, payload: dict):
+        self.id = payload["id"]
+        self.grupo_codigo = payload["grupo_codigo"]
+        self.es_admin = payload["es_admin"]
+
+# Dependency to check user authentication using Custom HMAC Token
 async def get_current_user(authorization: str = Header(None)):
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase no está configurado en el servidor")
@@ -40,13 +48,10 @@ async def get_current_user(authorization: str = Header(None)):
         raise HTTPException(status_code=401, detail="Falta el token de autorización o es inválido")
     
     token = authorization.split(" ")[1]
-    try:
-        res = supabase.auth.get_user(token)
-        if not res or not res.user:
-            raise HTTPException(status_code=401, detail="Token inválido o expirado")
-        return res.user
-    except Exception as e:
-        raise HTTPException(status_code=401, detail=f"No autorizado: {str(e)}")
+    payload = verify_session_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Token inválido, expirado o mal firmado")
+    return CurrentUser(payload)
 
 # Helper to check if a user is admin
 async def get_profile(user_id: str):
@@ -54,6 +59,19 @@ async def get_profile(user_id: str):
     return res.data
 
 # Request/Response models
+class GroupAuthInput(BaseModel):
+    grupo_codigo: str
+
+class JoinInput(BaseModel):
+    grupo_codigo: str
+    nombre_visible: str
+    pin: str
+
+class LoginInput(BaseModel):
+    grupo_codigo: str
+    nombre_visible: str
+    pin: str
+
 class PredictionInput(BaseModel):
     partido_id: int
     pred_local: int
@@ -65,6 +83,141 @@ async def health():
         "status": "ok",
         "supabase_configured": supabase is not None
     }
+
+# Endpoints de Autenticación Personalizada para Grupos/Pollas
+@app.post("/api/auth/group")
+async def get_group_users(input_data: GroupAuthInput):
+    try:
+        group_code = input_data.grupo_codigo.strip().lower()
+        if not group_code:
+            raise HTTPException(status_code=400, detail="Código de grupo inválido")
+            
+        res = supabase.table("perfiles").select("id, nombre_visible").eq("grupo_codigo", group_code).execute()
+        return {
+            "grupo_codigo": group_code,
+            "usuarios": res.data or []
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al obtener grupo: {str(e)}")
+
+@app.post("/api/auth/join")
+async def join_group(input_data: JoinInput):
+    try:
+        group_code = input_data.grupo_codigo.strip().lower()
+        name = input_data.nombre_visible.strip()
+        pin = input_data.pin.strip()
+        
+        if not group_code or not name or not pin:
+            raise HTTPException(status_code=400, detail="Todos los campos son obligatorios")
+            
+        # Verificar si el participante ya existe en este grupo
+        res_check = supabase.table("perfiles").select("id").eq("grupo_codigo", group_code).eq("nombre_visible", name).execute()
+        if res_check.data:
+            raise HTTPException(status_code=400, detail="Ya existe un participante con ese nombre en este grupo")
+            
+        # Verificar si es el primer usuario del grupo para asignarle admin
+        res_group_count = supabase.table("perfiles").select("id").eq("grupo_codigo", group_code).execute()
+        is_first = len(res_group_count.data or []) == 0
+        
+        # Guardar hash del PIN
+        hashed_pin = hash_pin(pin)
+        
+        # Crear perfil
+        profile_data = {
+            "grupo_codigo": group_code,
+            "nombre_visible": name,
+            "pin_hash": hashed_pin,
+            "es_admin": is_first
+        }
+        
+        res_insert = supabase.table("perfiles").insert(profile_data).execute()
+        if not res_insert.data:
+            raise HTTPException(status_code=500, detail="No se pudo crear el perfil")
+            
+        new_profile = res_insert.data[0]
+        
+        # Crear fila por defecto en predicciones_torneo
+        supabase.table("predicciones_torneo").insert({
+            "usuario_id": new_profile["id"],
+            "campeon": None,
+            "mejor_jugador": None,
+            "puntos_obtenidos": 0
+        }).execute()
+        
+        # Generar token
+        token = create_session_token(new_profile["id"], group_code, new_profile["es_admin"])
+        
+        return {
+            "token": token,
+            "profile": {
+                "id": new_profile["id"],
+                "grupo_codigo": group_code,
+                "nombre_visible": name,
+                "es_admin": new_profile["es_admin"]
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al registrarse: {str(e)}")
+
+@app.post("/api/auth/login")
+async def login_user(input_data: LoginInput):
+    try:
+        group_code = input_data.grupo_codigo.strip().lower()
+        name = input_data.nombre_visible.strip()
+        pin = input_data.pin.strip()
+        
+        if not group_code or not name or not pin:
+            raise HTTPException(status_code=400, detail="Todos los campos son obligatorios")
+            
+        # Buscar el perfil
+        res = supabase.table("perfiles").select("*").eq("grupo_codigo", group_code).eq("nombre_visible", name).execute()
+        if not res.data:
+            raise HTTPException(status_code=404, detail="Participante no encontrado en este grupo")
+            
+        profile = res.data[0]
+        
+        # Verificar el PIN
+        if not verify_pin(pin, profile["pin_hash"]):
+            raise HTTPException(status_code=401, detail="PIN incorrecto")
+            
+        # Generar token
+        token = create_session_token(profile["id"], group_code, profile["es_admin"])
+        
+        return {
+            "token": token,
+            "profile": {
+                "id": profile["id"],
+                "grupo_codigo": group_code,
+                "nombre_visible": name,
+                "es_admin": profile["es_admin"]
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al iniciar sesión: {str(e)}")
+
+@app.get("/api/auth/me")
+async def get_me(user=Depends(get_current_user)):
+    try:
+        profile = await get_profile(user.id)
+        if not profile:
+            raise HTTPException(status_code=404, detail="Perfil no encontrado")
+        return {
+            "id": profile["id"],
+            "grupo_codigo": profile["grupo_codigo"],
+            "nombre_visible": profile["nombre_visible"],
+            "es_admin": profile["es_admin"],
+            "creado_en": profile["creado_en"]
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al obtener perfil: {str(e)}")
 
 # 1. Listar partidos con campo calculado 'cerrado'
 @app.get("/api/partidos")
@@ -326,7 +479,7 @@ async def get_leaderboard(user=Depends(get_current_user)):
             raise HTTPException(status_code=500, detail="Supabase no está configurado en el servidor")
             
         # Obtener perfiles, partidos finalizados, predicciones y predicciones de torneo
-        res_perfiles = supabase.table("perfiles").select("id, nombre_visible").execute()
+        res_perfiles = supabase.table("perfiles").select("id, nombre_visible").eq("grupo_codigo", user.grupo_codigo).execute()
         res_partidos = supabase.table("partidos").select("id, goles_local, goles_visitante, estado").eq("estado", "finalizado").execute()
         res_preds = supabase.table("predicciones").select("usuario_id, partido_id, pred_local, pred_visitante, puntos_obtenidos").execute()
         res_torneo = supabase.table("predicciones_torneo").select("usuario_id, puntos_obtenidos").execute()
