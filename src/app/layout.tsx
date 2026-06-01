@@ -21,9 +21,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   viewportFit: "cover",
+  themeColor: "#f1f5f9",
 };
 
 export default function RootLayout({
@@ -34,7 +33,7 @@ export default function RootLayout({
   return (
     <html lang="es" className="h-full">
       <body
-        className={`${inter.variable} ${outfit.variable} font-sans min-h-full flex flex-col bg-slate-950 text-slate-100 selection:bg-teal-500 selection:text-slate-950 antialiased`}
+        className={`${inter.variable} ${outfit.variable} font-sans min-h-full flex flex-col text-slate-800 selection:bg-emerald-500 selection:text-white antialiased`}
       >
         <AuthProvider>
           {children}

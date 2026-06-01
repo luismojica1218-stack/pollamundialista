@@ -47,7 +47,7 @@ export default function Home() {
                 </span>
                 <Link
                   href="/predicciones"
-                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-teal-450 hover:bg-teal-400 text-slate-950 font-bold rounded-xl text-xs transition-all cursor-pointer font-display"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold rounded-xl text-xs transition-all cursor-pointer font-display"
                 >
                   Mi Panel <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
@@ -95,7 +95,7 @@ export default function Home() {
                   </p>
                   <Link
                     href="/predicciones"
-                    className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 bg-teal-400 hover:bg-teal-350 text-slate-950 font-bold rounded-xl text-sm transition-all cursor-pointer font-display shadow-lg shadow-teal-500/10"
+                    className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 bg-teal-400 hover:bg-teal-400 text-slate-950 font-bold rounded-xl text-sm transition-all cursor-pointer font-display shadow-lg shadow-teal-500/10"
                   >
                     Ir a mis Predicciones
                     <ArrowRight className="h-4 w-4" />
@@ -106,7 +106,7 @@ export default function Home() {
                   <h3 className="text-md font-semibold text-white mb-2 flex items-center gap-2">
                     <Users className="h-4 w-4 text-teal-400" /> Ingresar a una Polla
                   </h3>
-                  <p className="text-xs text-slate-450 mb-4">
+                  <p className="text-xs text-slate-400 mb-4">
                     Escribe el código de tu grupo (ej: <code>el-atico</code>). Si el grupo no existe, se creará automáticamente para ti y tus amigos.
                   </p>
                   
@@ -120,14 +120,14 @@ export default function Home() {
                         className="w-full pl-3 pr-10 py-3 bg-slate-950 border border-slate-800 rounded-xl text-sm focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 transition-all text-white placeholder-slate-600"
                         maxLength={20}
                       />
-                      <Key className="absolute right-3 top-3.5 h-4 w-4 text-slate-650" />
+                      <Key className="absolute right-3 top-3.5 h-4 w-4 text-slate-500" />
                     </div>
                     {error && (
-                      <p className="text-xs text-rose-450 font-semibold px-1">{error}</p>
+                      <p className="text-xs text-rose-500 font-semibold px-1">{error}</p>
                     )}
                     <button
                       type="submit"
-                      className="w-full mt-2 inline-flex items-center justify-center gap-2 px-5 py-3 bg-teal-400 hover:bg-teal-350 text-slate-950 font-bold rounded-xl text-sm transition-all cursor-pointer font-display shadow-lg shadow-teal-500/10"
+                      className="w-full mt-2 inline-flex items-center justify-center gap-2 px-5 py-3 bg-teal-400 hover:bg-teal-400 text-slate-950 font-bold rounded-xl text-sm transition-all cursor-pointer font-display shadow-lg shadow-teal-500/10"
                     >
                       Entrar al Grupo
                       <ArrowRight className="h-4 w-4" />
@@ -231,7 +231,7 @@ export default function Home() {
                     <span className="font-bold text-teal-400">15 pts</span>
                   </li>
                 </ul>
-                <div className="mt-6 p-3 rounded bg-teal-500/5 border border-teal-500/10 text-xs text-slate-450 flex gap-2">
+                <div className="mt-6 p-3 rounded bg-teal-500/5 border border-teal-500/10 text-xs text-slate-400 flex gap-2">
                   <Star className="h-4 w-4 text-teal-400 shrink-0" />
                   <span>Los bonus se definen antes de que empiece la fase de eliminación directa (Octavos de final).</span>
                 </div>

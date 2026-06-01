@@ -257,7 +257,7 @@ export default function PrediccionesTorneoPage() {
                     <button
                       onClick={handleSave}
                       disabled={savingState === 'saving'}
-                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-teal-400 text-slate-950 font-bold hover:bg-teal-350 transition-colors shadow-lg shadow-teal-500/10 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer text-sm"
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-teal-400 text-slate-950 font-bold hover:bg-teal-400 transition-colors shadow-lg shadow-teal-500/10 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer text-sm"
                     >
                       <Save className="h-4 w-4" />
                       Guardar Predicciones

@@ -454,7 +454,7 @@ export default function AdminPage() {
                             <button
                               onClick={() => handleSaveResult(partido.id)}
                               disabled={isSaving}
-                              className="inline-flex items-center gap-1 text-slate-950 font-bold bg-teal-400 hover:bg-teal-350 px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer"
+                              className="inline-flex items-center gap-1 text-slate-950 font-bold bg-teal-400 hover:bg-teal-400 px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer"
                               title="Guardar resultado"
                             >
                               <Save className="h-3 w-3" />

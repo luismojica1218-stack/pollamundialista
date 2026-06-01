@@ -87,7 +87,7 @@ export default function AdminRoute({ children }: { children: React.ReactNode }) 
                 className={`block w-full px-4 py-3 bg-slate-950 border rounded-xl text-white text-center font-bold text-2xl tracking-widest focus:outline-none focus:ring-2 transition-all ${
                   error 
                     ? 'border-red-500 ring-2 ring-red-500/20 animate-shake' 
-                    : 'border-slate-850 focus:ring-red-500/50 focus:border-red-500'
+                    : 'border-slate-800 focus:ring-red-500/50 focus:border-red-500'
                 }`}
                 autoFocus
               />

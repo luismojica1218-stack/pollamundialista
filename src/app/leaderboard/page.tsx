@@ -116,7 +116,7 @@ export default function LeaderboardPage() {
               <button
                 onClick={() => fetchLeaderboard(true)}
                 disabled={refreshing}
-                className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-800 text-slate-450 hover:bg-slate-900 hover:text-white transition-all cursor-pointer disabled:opacity-50"
+                className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-800 text-slate-400 hover:bg-slate-900 hover:text-white transition-all cursor-pointer disabled:opacity-50"
                 title="Actualizar manualmente"
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
@@ -130,7 +130,7 @@ export default function LeaderboardPage() {
             </div>
           ) : leaderboard.length === 0 ? (
             <div className="glass rounded-2xl p-12 text-center border border-slate-800 bg-slate-900/10">
-              <User className="mx-auto h-12 w-12 text-slate-650 mb-4" />
+              <User className="mx-auto h-12 w-12 text-slate-500 mb-4" />
               <h3 className="text-lg font-semibold text-white mb-2">No hay participantes registrados</h3>
               <p className="text-sm text-slate-400">
                 Los usuarios aparecerán en la tabla cuando configuren sus predicciones.
@@ -229,7 +229,7 @@ export default function LeaderboardPage() {
                   } else if (position === 3) {
                     posBadge = 'text-amber-600 bg-amber-700/10 border-amber-700/20';
                   } else {
-                    posBadge = 'text-slate-450 bg-slate-950 border-slate-900';
+                    posBadge = 'text-slate-400 bg-slate-950 border-slate-900';
                   }
 
                   return (
@@ -238,7 +238,7 @@ export default function LeaderboardPage() {
                       className={`glass rounded-xl p-4 border transition-all flex items-center justify-between gap-3 ${
                         isMe
                           ? 'border-teal-500/30 bg-teal-500/5 shadow-md shadow-teal-500/5'
-                          : 'border-slate-850/80 bg-slate-900/10'
+                          : 'border-slate-800/80 bg-slate-900/10'
                       }`}
                     >
                       {/* Rank & Name */}

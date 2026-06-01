@@ -19,23 +19,23 @@ export default function NavBar() {
   ];
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md">
+    <header className="sticky top-0 z-40 w-full border-b border-slate-200 glass">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
           <div className="flex items-center gap-2">
-            <Link href="/" className="flex items-center gap-2 group">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-500/10 border border-teal-500/20 text-teal-400 group-hover:bg-teal-500/20 transition-all">
+            <Link href="/" className="flex items-center gap-2.5 group">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-md shadow-emerald-500/25 group-hover:scale-105 transition-transform">
                 <Trophy className="h-5 w-5" />
               </div>
-              <span className="font-display font-bold tracking-tight text-white group-hover:text-teal-400 transition-colors">
+              <span className="font-display font-extrabold tracking-tight text-slate-900 group-hover:text-emerald-600 transition-colors">
                 El Ático
               </span>
             </Link>
           </div>
 
           {/* Desktop Nav Links */}
-          <nav className="hidden md:flex items-center gap-6">
+          <nav className="hidden md:flex items-center gap-1">
             {navigation.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.href;
@@ -43,10 +43,10 @@ export default function NavBar() {
                 <Link
                   key={item.name}
                   href={item.href}
-                  className={`flex items-center gap-2 text-sm font-medium transition-colors ${
+                  className={`flex items-center gap-2 text-sm font-semibold px-3 py-2 rounded-lg transition-colors ${
                     isActive
-                      ? 'text-teal-400 font-semibold'
-                      : 'text-slate-400 hover:text-slate-200'
+                      ? 'text-emerald-700 bg-emerald-50'
+                      : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
                   }`}
                 >
                   <Icon className="h-4 w-4" />
@@ -54,12 +54,12 @@ export default function NavBar() {
                 </Link>
               );
             })}
-            
+
             {isAdmin && (
               <Link
                 href="/admin"
-                className={`flex items-center gap-2 text-sm font-medium px-3 py-1.5 rounded-lg border border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors ${
-                  pathname === '/admin' ? 'border-red-500/55 bg-red-500/20' : ''
+                className={`flex items-center gap-2 text-sm font-semibold px-3 py-2 rounded-lg border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors ${
+                  pathname === '/admin' ? 'ring-1 ring-rose-300' : ''
                 }`}
               >
                 <ShieldAlert className="h-4 w-4" />
@@ -69,21 +69,26 @@ export default function NavBar() {
           </nav>
 
           {/* Right Action Menu */}
-          <div className="hidden md:flex items-center gap-4">
+          <div className="hidden md:flex items-center gap-3">
             {profile && (
-              <div className="flex flex-col text-right">
-                <span className="text-sm font-semibold text-white">
-                  {profile.nombre_visible}
-                </span>
-                <span className="text-xs text-slate-500">
-                  Grupo: {profile.grupo_codigo}
-                </span>
+              <div className="flex items-center gap-2.5 pl-1">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 font-bold text-sm">
+                  {profile.nombre_visible?.charAt(0).toUpperCase()}
+                </div>
+                <div className="flex flex-col leading-tight">
+                  <span className="text-sm font-semibold text-slate-900">
+                    {profile.nombre_visible}
+                  </span>
+                  <span className="text-xs text-slate-400">
+                    Grupo: {profile.grupo_codigo}
+                  </span>
+                </div>
               </div>
             )}
-            
+
             <button
               onClick={() => signOut()}
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-800 text-slate-400 hover:bg-slate-900 hover:text-white transition-all cursor-pointer"
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-all cursor-pointer"
               title="Cerrar sesión"
             >
               <LogOut className="h-4 w-4" />
@@ -94,13 +99,9 @@ export default function NavBar() {
           <div className="flex md:hidden">
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="inline-flex items-center justify-center p-2 rounded-lg text-slate-400 hover:bg-slate-900 hover:text-white transition-all cursor-pointer"
+              className="inline-flex items-center justify-center p-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-all cursor-pointer"
             >
-              {mobileMenuOpen ? (
-                <X className="h-6 w-6" />
-              ) : (
-                <Menu className="h-6 w-6" />
-              )}
+              {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
             </button>
           </div>
         </div>
@@ -108,20 +109,25 @@ export default function NavBar() {
 
       {/* Mobile Menu */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-b border-slate-800 bg-slate-950 px-4 py-4 space-y-3">
-          <div className="pb-3 border-b border-slate-900 flex items-center justify-between">
+        <div className="md:hidden border-t border-slate-200 bg-white px-4 py-4 space-y-3">
+          <div className="pb-3 border-b border-slate-100 flex items-center justify-between">
             {profile && (
-              <div>
-                <p className="text-sm font-semibold text-white">{profile.nombre_visible}</p>
-                <p className="text-xs text-slate-500">Grupo: {profile.grupo_codigo}</p>
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 font-bold text-sm">
+                  {profile.nombre_visible?.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">{profile.nombre_visible}</p>
+                  <p className="text-xs text-slate-400">Grupo: {profile.grupo_codigo}</p>
+                </div>
               </div>
             )}
             <button
               onClick={() => signOut()}
-              className="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-900 text-slate-400 hover:text-white transition-all cursor-pointer"
+              className="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-100 text-slate-500 hover:text-slate-900 transition-all cursor-pointer"
             >
               <LogOut className="h-3.5 w-3.5" />
-              Cerrar Sesión
+              Salir
             </button>
           </div>
 
@@ -134,10 +140,10 @@ export default function NavBar() {
                   key={item.name}
                   href={item.href}
                   onClick={() => setMobileMenuOpen(false)}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-base font-medium transition-colors ${
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-base font-semibold transition-colors ${
                     isActive
-                      ? 'bg-teal-500/10 text-teal-400 font-semibold'
-                      : 'text-slate-400 hover:bg-slate-900 hover:text-white'
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                   }`}
                 >
                   <Icon className="h-5 w-5" />
@@ -150,7 +156,7 @@ export default function NavBar() {
               <Link
                 href="/admin"
                 onClick={() => setMobileMenuOpen(false)}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-base font-medium border border-red-500/30 bg-red-500/5 text-red-400 hover:bg-red-500/15 transition-colors`}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-base font-semibold border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors"
               >
                 <ShieldAlert className="h-5 w-5" />
                 Admin

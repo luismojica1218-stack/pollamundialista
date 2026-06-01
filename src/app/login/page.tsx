@@ -178,7 +178,7 @@ function LoginContent() {
                 }
                 resetForm();
               }}
-              className="inline-flex items-center gap-1 text-xs text-slate-450 hover:text-white mb-4 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-white mb-4 transition-colors cursor-pointer"
             >
               <ArrowLeft className="h-3 w-3" /> Cambiar de {stage === 'register-user' && users.length > 0 ? 'vista' : 'grupo'}
             </button>
@@ -221,7 +221,7 @@ function LoginContent() {
                 <button
                   type="submit"
                   disabled={loadingGroup}
-                  className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-semibold rounded-xl text-slate-950 bg-teal-400 hover:bg-teal-350 transition-all cursor-pointer font-display"
+                  className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-semibold rounded-xl text-slate-950 bg-teal-400 hover:bg-teal-400 transition-all cursor-pointer font-display"
                 >
                   {loadingGroup ? (
                     <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-950 border-t-transparent"></div>
@@ -269,7 +269,7 @@ function LoginContent() {
                         setStage('register-user');
                         resetForm();
                       }}
-                      className="inline-flex items-center gap-1.5 text-xs text-teal-450 hover:text-teal-400 font-semibold transition-colors cursor-pointer"
+                      className="inline-flex items-center gap-1.5 text-xs text-teal-500 hover:text-teal-400 font-semibold transition-colors cursor-pointer"
                     >
                       <UserPlus className="h-3.5 w-3.5" /> Soy un nuevo participante
                     </button>
@@ -278,7 +278,7 @@ function LoginContent() {
               ) : (
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div className="p-3 bg-slate-900/40 border border-slate-800 rounded-xl mb-4 text-center">
-                    <span className="text-xs text-slate-450">Conectando como</span>
+                    <span className="text-xs text-slate-400">Conectando como</span>
                     <h3 className="text-md font-bold text-white mt-0.5">{selectedUser.nombre_visible}</h3>
                     <button
                       type="button"
@@ -286,7 +286,7 @@ function LoginContent() {
                         setSelectedUser(null);
                         setPin('');
                       }}
-                      className="text-[10px] text-teal-450 hover:underline mt-1 block w-full text-center cursor-pointer"
+                      className="text-[10px] text-teal-500 hover:underline mt-1 block w-full text-center cursor-pointer"
                     >
                       Cambiar de nombre
                     </button>
@@ -305,17 +305,17 @@ function LoginContent() {
                         placeholder="PIN..."
                         inputMode="numeric"
                         pattern="[0-9]*"
-                        className="block w-full pl-3 pr-10 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-650 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500 transition-all text-center tracking-widest text-lg font-bold"
+                        className="block w-full pl-3 pr-10 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500 transition-all text-center tracking-widest text-lg font-bold"
                         maxLength={10}
                       />
-                      <Lock className="absolute right-3 top-3.5 h-4 w-4 text-slate-650" />
+                      <Lock className="absolute right-3 top-3.5 h-4 w-4 text-slate-500" />
                     </div>
                   </div>
 
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-semibold rounded-xl text-slate-950 bg-teal-400 hover:bg-teal-350 transition-all cursor-pointer font-display"
+                    className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-semibold rounded-xl text-slate-950 bg-teal-400 hover:bg-teal-400 transition-all cursor-pointer font-display"
                   >
                     {isSubmitting ? (
                       <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-950 border-t-transparent"></div>
@@ -369,10 +369,10 @@ function LoginContent() {
                       placeholder="PIN..."
                       inputMode="numeric"
                       pattern="[0-9]*"
-                      className="block w-full pl-3 pr-10 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-650 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500 transition-all text-center tracking-widest text-lg font-bold"
+                      className="block w-full pl-3 pr-10 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500 transition-all text-center tracking-widest text-lg font-bold"
                       maxLength={10}
                     />
-                    <Key className="absolute right-3 top-3.5 h-4 w-4 text-slate-650" />
+                    <Key className="absolute right-3 top-3.5 h-4 w-4 text-slate-500" />
                   </div>
                   <span className="text-[10px] text-slate-500 block mt-1 text-center">
                     Este PIN te servirá para que nadie más pueda editar tus predicciones.
@@ -382,7 +382,7 @@ function LoginContent() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-semibold rounded-xl text-slate-950 bg-teal-400 hover:bg-teal-350 transition-all cursor-pointer font-display"
+                  className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-semibold rounded-xl text-slate-950 bg-teal-400 hover:bg-teal-400 transition-all cursor-pointer font-display"
                 >
                   {isSubmitting ? (
                     <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-950 border-t-transparent"></div>
