@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import NavBar from '@/components/NavBar';
+import CountryFlag from '@/components/CountryFlag';
 import { useAuth } from '@/context/AuthContext';
 import { Trophy, Calendar, Star } from 'lucide-react';
 
@@ -187,9 +188,11 @@ export default function MisPuntosPage() {
                             </span>
                             <div className="flex items-center gap-2 text-sm sm:text-base">
                               <span className="font-semibold text-white truncate">{partido.equipo_local}</span>
-                              <span className="text-teal-400 font-bold bg-teal-500/10 px-2 py-0.5 rounded border border-teal-500/20">
+                              <CountryFlag teamName={partido.equipo_local} />
+                              <span className="text-teal-400 font-bold bg-teal-500/10 px-2 py-0.5 rounded border border-teal-500/20 mx-1">
                                 {partido.goles_local} – {partido.goles_visitante}
                               </span>
+                              <CountryFlag teamName={partido.equipo_visitante} />
                               <span className="font-semibold text-white truncate">{partido.equipo_visitante}</span>
                             </div>
                           </div>

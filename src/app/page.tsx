@@ -38,6 +38,14 @@ export default function Home() {
           </div>
 
           <nav className="flex items-center gap-4">
+            <a
+              href="/reglas.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm font-semibold text-slate-300 hover:text-white transition-colors hidden sm:block"
+            >
+              Reglas
+            </a>
             {loading ? (
               <div className="h-5 w-5 animate-spin rounded-full border-2 border-teal-500 border-t-transparent"></div>
             ) : profile ? (
@@ -146,9 +154,12 @@ export default function Home() {
               <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white font-display">
                 Reglas de Puntuación
               </h2>
-              <p className="mt-2 text-xs sm:text-sm text-slate-400">
+              <p className="mt-2 text-xs sm:text-sm text-slate-400 mb-4">
                 Así es como sumas puntos en cada uno de los 104 partidos.
               </p>
+              <a href="/reglas.html" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full border border-teal-500/30 text-teal-400 hover:bg-teal-500/10 transition-colors text-sm font-semibold">
+                Ver reglamento detallado <ArrowRight className="h-3.5 w-3.5" />
+              </a>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">

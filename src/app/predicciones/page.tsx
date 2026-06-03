@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import NavBar from '@/components/NavBar';
+import CountryFlag from '@/components/CountryFlag';
 import { useAuth } from '@/context/AuthContext';
 import { CalendarDays, Save, CheckCircle2, XCircle, Clock, Trophy, Lock } from 'lucide-react';
 
@@ -195,8 +196,8 @@ export default function PrediccionesPage() {
               <h1 className="mt-3 text-3xl sm:text-4xl font-extrabold tracking-tight font-display">
                 Tus Predicciones
               </h1>
-              <p className="mt-1.5 text-sm text-emerald-50/90 max-w-lg">
-                Pronostica los 104 partidos. Cada predicción se bloquea 1 hora antes del pitazo inicial.
+              <p className="mt-1.5 text-sm text-emerald-50/90 max-w-lg leading-relaxed">
+                Pronostica los 104 partidos. Puedes sobreescribir tus resultados tantas veces como quieras hasta exactamente <strong>1 hora antes</strong> del pitazo inicial de cada encuentro.
               </p>
               <div className="mt-5 flex gap-3">
                 <div className="rounded-2xl bg-white/15 px-4 py-2.5 backdrop-blur">
@@ -345,13 +346,15 @@ export default function PrediccionesPage() {
 
                           {/* Teams + score */}
                           <div className="flex items-center gap-3 pl-1">
-                            <div className="flex-1 min-w-0 text-right">
+                            <div className="flex-1 min-w-0 flex items-center justify-end gap-2">
                               <span className="font-bold text-slate-900 block text-[15px] truncate">{partido.equipo_local}</span>
+                              <CountryFlag teamName={partido.equipo_local} />
                             </div>
                             <ScoreController team="local" value={localVal} />
                             <span className="text-slate-300 font-bold">:</span>
                             <ScoreController team="visitante" value={visitanteVal} />
-                            <div className="flex-1 min-w-0 text-left">
+                            <div className="flex-1 min-w-0 flex items-center justify-start gap-2">
+                              <CountryFlag teamName={partido.equipo_visitante} />
                               <span className="font-bold text-slate-900 block text-[15px] truncate">{partido.equipo_visitante}</span>
                             </div>
                           </div>
@@ -386,14 +389,14 @@ export default function PrediccionesPage() {
                               ) : (
                                 <div className="flex items-center gap-2">
                                   {saving === 'saving' && (
-                                    <span className="text-slate-400 flex items-center gap-1">
+                                    <span className="text-slate-400 flex items-center gap-1 text-xs">
                                       <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-300 border-t-transparent" />
                                       Guardando
                                     </span>
                                   )}
-                                  {saving === 'saved' && !isModified && (
-                                    <span className="text-emerald-600 flex items-center gap-1 font-bold">
-                                      <CheckCircle2 className="h-4 w-4" /> Guardado
+                                  {((saving === 'saved' || pred) && !isModified && saving !== 'saving') && (
+                                    <span className="text-emerald-600 flex items-center gap-1 font-bold text-xs bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-100 shadow-sm">
+                                      <CheckCircle2 className="h-3.5 w-3.5" /> Guardado
                                     </span>
                                   )}
                                   {saving === 'error' && (

@@ -66,6 +66,15 @@ export default function NavBar() {
                 Admin
               </Link>
             )}
+
+            <a
+              href="/reglas.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 text-sm font-semibold px-3 py-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors ml-2"
+            >
+              Reglas
+            </a>
           </nav>
 
           {/* Right Action Menu */}
