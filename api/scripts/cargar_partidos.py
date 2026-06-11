@@ -135,9 +135,12 @@ def sync_matches():
                     payload["goles_local"] = goles_local
                     payload["goles_visitante"] = goles_visitante
                 
-                # Realizar UPSERT en la base de datos
+                # Realizar UPSERT en la base de datos.
+                # on_conflict="espn_event_id" => si el partido ya existe, ACTUALIZA
+                # esa misma fila (conserva su 'id'), por lo que las predicciones de
+                # los jugadores (que referencian partido_id) NO se ven afectadas.
                 try:
-                    res = supabase.table("partidos").upsert(payload).execute()
+                    res = supabase.table("partidos").upsert(payload, on_conflict="espn_event_id").execute()
                     if res.data:
                         total_upserted += 1
                 except Exception as e:

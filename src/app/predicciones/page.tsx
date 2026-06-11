@@ -148,7 +148,7 @@ export default function PrediccionesPage() {
 
   const getDeadlineInfo = (inicioUtc: string) => {
     const inicio = new Date(inicioUtc);
-    const deadline = new Date(inicio.getTime() - 60 * 60 * 1000);
+    const deadline = new Date(inicio.getTime() - 30 * 60 * 1000);
     const diffMs = deadline.getTime() - currentTime.getTime();
     const formattedDeadline = deadline.toLocaleDateString('es-ES', {
       day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
@@ -197,7 +197,7 @@ export default function PrediccionesPage() {
                 Tus Predicciones
               </h1>
               <p className="mt-1.5 text-sm text-emerald-50/90 max-w-lg leading-relaxed">
-                Pronostica los 104 partidos. Puedes sobreescribir tus resultados tantas veces como quieras hasta exactamente <strong>1 hora antes</strong> del pitazo inicial de cada encuentro.
+                Pronostica los 104 partidos. Puedes sobreescribir tus resultados tantas veces como quieras hasta exactamente <strong>30 minutos antes</strong> del pitazo inicial de cada encuentro.
               </p>
               <div className="mt-5 flex gap-3">
                 <div className="rounded-2xl bg-white/15 px-4 py-2.5 backdrop-blur">

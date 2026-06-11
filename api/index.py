@@ -229,8 +229,8 @@ async def get_partidos(user=Depends(get_current_user)):
         now = datetime.now(timezone.utc)
         for partido in partidos:
             inicio_match = isoparse(partido["inicio_utc"])
-            # Cerrado si falta menos de 1 hora para el inicio
-            partido["cerrado"] = now >= (inicio_match - timedelta(hours=1))
+            # Cerrado si faltan menos de 30 minutos para el inicio
+            partido["cerrado"] = now >= (inicio_match - timedelta(minutes=30))
             
         return partidos
     except Exception as e:
@@ -259,11 +259,11 @@ async def save_prediccion(input_data: PredictionInput, user=Depends(get_current_
         now = datetime.now(timezone.utc)
         inicio_match = isoparse(partido["inicio_utc"])
         
-        # Validar si el partido ya está cerrado (menos de 1 hora para iniciar)
-        if now >= (inicio_match - timedelta(hours=1)):
+        # Validar si el partido ya está cerrado (menos de 30 minutos para iniciar)
+        if now >= (inicio_match - timedelta(minutes=30)):
             raise HTTPException(
-                status_code=403, 
-                detail="El partido está cerrado. No se pueden guardar predicciones dentro de la hora previa al inicio."
+                status_code=403,
+                detail="El partido está cerrado. No se pueden guardar predicciones dentro de los 30 minutos previos al inicio."
             )
             
         # Preparar payload de predicción
@@ -341,6 +341,167 @@ async def save_predicciones_torneo(input_data: TournamentPredictionInput, user=D
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al guardar predicción de torneo: {str(e)}")
 
+# Mapeo de fases de ESPN a la base de datos (debe coincidir con cargar_partidos.py)
+FASE_MAPPING = {
+    'group-stage': 'grupos',
+    'round-of-32': 'ronda32',
+    'round-of-16': 'octavos',
+    'quarterfinals': 'cuartos',
+    'semifinals': 'semis',
+    '3rd-place-match': 'tercer_puesto',
+    'final': 'final',
+}
+
+
+def _derivar_fase(event: dict) -> Optional[str]:
+    """Deriva la fase a partir del slug de temporada de ESPN. None si no se puede determinar."""
+    slug = event.get("season", {}).get("slug")
+    if not slug:
+        return None
+    return FASE_MAPPING.get(slug)
+
+
+def _sincronizar_fechas(dates_to_sync: list) -> dict:
+    """
+    Sincroniza partidos con ESPN para las fechas dadas.
+
+    GARANTÍAS DE SEGURIDAD (no se mueven las predicciones existentes):
+    - Nunca inserta ni borra filas de 'partidos' (solo actualiza filas que ya
+      existen, identificadas por espn_event_id, conservando su 'id').
+    - Nunca borra ni reescribe las predicciones de los jugadores. Lo único que
+      se toca de 'predicciones' es 'puntos_obtenidos', y SOLO cuando un partido
+      pasa a 'finalizado' (recálculo según las reglas), igual que antes.
+    - Para partidos aún NO finalizados, refresca en sitio los equipos y la fase
+      (así se llenan solos los cruces de playoffs). No toca goles ni cierra nada.
+    - A un partido ya 'finalizado' no se le tocan los metadatos.
+    """
+    partidos_actualizados = []
+    metadatos_actualizados = []
+    total_recalculados = 0
+
+    for d_str in dates_to_sync:
+        url = f"https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates={d_str}"
+        try:
+            response = httpx.get(url, timeout=20)
+        except Exception:
+            continue
+        if response.status_code != 200:
+            continue
+
+        data = response.json()
+        events = data.get("events", [])
+
+        for event in events:
+            event_id = event.get("id")
+            if not event_id:
+                continue
+            espn_state = event.get("status", {}).get("type", {}).get("state", "pre")
+
+            competitions = event.get("competitions", [])
+            if not competitions:
+                continue
+            competitors = competitions[0].get("competitors", [])
+            if len(competitors) < 2:
+                continue
+
+            home_team = away_team = None
+            goles_local = goles_visitante = None
+            for comp in competitors:
+                role = comp.get("homeAway")
+                team_name = comp.get("team", {}).get("displayName")
+                score_str = comp.get("score")
+                if role == "home":
+                    home_team = team_name
+                    if score_str not in (None, ""):
+                        try:
+                            goles_local = int(score_str)
+                        except (TypeError, ValueError):
+                            pass
+                elif role == "away":
+                    away_team = team_name
+                    if score_str not in (None, ""):
+                        try:
+                            goles_visitante = int(score_str)
+                        except (TypeError, ValueError):
+                            pass
+
+            # El partido DEBE existir ya en la base; nunca insertamos uno nuevo.
+            res_match = supabase.table("partidos").select("*").eq("espn_event_id", event_id).execute()
+            if not res_match.data:
+                continue
+            db_match = res_match.data[0]
+
+            # --- Rama A: finalizado en ESPN -> marcador + recálculo de puntos ---
+            if espn_state == "post" and goles_local is not None and goles_visitante is not None:
+                fase_actual = _derivar_fase(event) or db_match["fase"]
+                necesita = (
+                    db_match["estado"] != "finalizado" or
+                    db_match["goles_local"] != goles_local or
+                    db_match["goles_visitante"] != goles_visitante or
+                    db_match["fase"] != fase_actual
+                )
+                if necesita:
+                    supabase.table("partidos").update({
+                        "goles_local": goles_local,
+                        "goles_visitante": goles_visitante,
+                        "estado": "finalizado",
+                        "fase": fase_actual,
+                    }).eq("id", db_match["id"]).execute()
+
+                    res_preds = supabase.table("predicciones").select("*").eq("partido_id", db_match["id"]).execute()
+                    preds = res_preds.data or []
+                    for pred in preds:
+                        puntos = calcular_puntos(
+                            pred_local=pred["pred_local"],
+                            pred_visitante=pred["pred_visitante"],
+                            real_local=goles_local,
+                            real_visitante=goles_visitante,
+                            fase=fase_actual,
+                        )
+                        supabase.table("predicciones").update({
+                            "puntos_obtenidos": puntos
+                        }).eq("id", pred["id"]).execute()
+                        total_recalculados += 1
+
+                    partidos_actualizados.append({
+                        "partido": f"{db_match['equipo_local']} vs {db_match['equipo_visitante']}",
+                        "goles": f"{goles_local}-{goles_visitante}",
+                        "predicciones_actualizadas": len(preds),
+                    })
+                continue
+
+            # --- Rama B: NO finalizado -> refrescar equipos/fase en sitio ---
+            # No se tocan goles, no se cierra el partido, no se tocan predicciones.
+            if db_match["estado"] == "finalizado":
+                continue  # ya cerrado: no lo perturbamos
+
+            cambios = {}
+            if home_team and home_team != db_match["equipo_local"]:
+                cambios["equipo_local"] = home_team
+            if away_team and away_team != db_match["equipo_visitante"]:
+                cambios["equipo_visitante"] = away_team
+            fase_actual = _derivar_fase(event)
+            if fase_actual and fase_actual != db_match["fase"]:
+                cambios["fase"] = fase_actual
+            nuevo_estado = {"pre": "programado", "in": "en_juego"}.get(espn_state)
+            if nuevo_estado and nuevo_estado != db_match["estado"]:
+                cambios["estado"] = nuevo_estado
+
+            if cambios:
+                supabase.table("partidos").update(cambios).eq("id", db_match["id"]).execute()
+                metadatos_actualizados.append({
+                    "espn_event_id": event_id,
+                    "cambios": list(cambios.keys()),
+                })
+
+    return {
+        "status": "success",
+        "partidos_actualizados": partidos_actualizados,
+        "metadatos_actualizados": metadatos_actualizados,
+        "total_predicciones_recalculadas": total_recalculados,
+    }
+
+
 # 6. Endpoint de sincronización (Cron Job / Vercel Cron)
 @app.post("/api/cron/sincronizar")
 async def sincronizar(date: Optional[str] = None, authorization: str = Header(None)):
@@ -360,7 +521,6 @@ async def sincronizar(date: Optional[str] = None, authorization: str = Header(No
         raise HTTPException(status_code=401, detail="No autorizado: Secreto de cron inválido")
 
     # Determinar fechas a sincronizar
-    dates_to_sync = []
     if date:
         dates_to_sync = [date]
     else:
@@ -371,103 +531,8 @@ async def sincronizar(date: Optional[str] = None, authorization: str = Header(No
             now.strftime("%Y%m%d")
         ]
 
-    partidos_actualizados = []
-    total_recalculados = 0
-
     try:
-        for d_str in dates_to_sync:
-            url = f"https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates={d_str}"
-            response = httpx.get(url)
-            if response.status_code != 200:
-                continue
-                
-            data = response.json()
-            events = data.get("events", [])
-            
-            for event in events:
-                event_id = event.get("id")
-                espn_state = event.get("status", {}).get("type", {}).get("state", "pre")
-                
-                # Solo procesamos partidos finalizados en ESPN
-                if espn_state != "post":
-                    continue
-                    
-                competitions = event.get("competitions", [])
-                if not competitions:
-                    continue
-                    
-                competitors = competitions[0].get("competitors", [])
-                if len(competitors) < 2:
-                    continue
-                
-                goles_local = None
-                goles_visitante = None
-                
-                for comp in competitors:
-                    role = comp.get("homeAway")
-                    score_str = comp.get("score")
-                    
-                    if role == "home" and score_str is not None:
-                        goles_local = int(score_str)
-                    elif role == "away" and score_str is not None:
-                        goles_visitante = int(score_str)
-
-                if goles_local is None or goles_visitante is None:
-                    continue
-
-                # Consultar si el partido existe en base de datos
-                res_match = supabase.table("partidos").select("*").eq("espn_event_id", event_id).execute()
-                if not res_match.data:
-                    continue
-                    
-                db_match = res_match.data[0]
-                
-                # Verificar si es necesario actualizar
-                necesita_actualizacion = (
-                    db_match["estado"] != "finalizado" or
-                    db_match["goles_local"] != goles_local or
-                    db_match["goles_visitante"] != goles_visitante
-                )
-                
-                if necesita_actualizacion:
-                    # 1. Actualizar estado y goles del partido
-                    supabase.table("partidos").update({
-                        "goles_local": goles_local,
-                        "goles_visitante": goles_visitante,
-                        "estado": "finalizado"
-                    }).eq("id", db_match["id"]).execute()
-                    
-                    # 2. Buscar predicciones del partido para recalcular
-                    res_preds = supabase.table("predicciones").select("*").eq("partido_id", db_match["id"]).execute()
-                    preds = res_preds.data or []
-                    
-                    for pred in preds:
-                        puntos = calcular_puntos(
-                            pred_local=pred["pred_local"],
-                            pred_visitante=pred["pred_visitante"],
-                            real_local=goles_local,
-                            real_visitante=goles_visitante,
-                            fase=db_match["fase"]
-                        )
-                        
-                        # Guardar puntos obtenidos en la predicción
-                        supabase.table("predicciones").update({
-                            "puntos_obtenidos": puntos
-                        }).eq("id", pred["id"]).execute()
-                        
-                        total_recalculados += 1
-                        
-                    partidos_actualizados.append({
-                        "partido": f"{db_match['equipo_local']} vs {db_match['equipo_visitante']}",
-                        "goles": f"{goles_local}-{goles_visitante}",
-                        "predicciones_actualizadas": len(preds)
-                    })
-                    
-        return {
-            "status": "success",
-            "partidos_actualizados": partidos_actualizados,
-            "total_predicciones_recalculadas": total_recalculados
-        }
+        return _sincronizar_fechas(dates_to_sync)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error en la sincronización: {str(e)}")
 
@@ -677,9 +742,6 @@ async def admin_finalize_tournament(input_data: AdminFinalizeTournamentInput):
 @app.post("/api/admin/sincronizar", dependencies=[Depends(require_admin)])
 async def admin_sincronizar_manual(date: Optional[str] = None):
     try:
-        # Reutilizamos el proceso llamando directamente la lógica de sincronización
-        # Simulamos que tenemos el secreto correcto
-        dates_to_sync = []
         if date:
             dates_to_sync = [date]
         else:
@@ -688,94 +750,6 @@ async def admin_sincronizar_manual(date: Optional[str] = None):
                 (now - timedelta(days=1)).strftime("%Y%m%d"),
                 now.strftime("%Y%m%d")
             ]
-
-        partidos_actualizados = []
-        total_recalculados = 0
-
-        for d_str in dates_to_sync:
-            url = f"https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates={d_str}"
-            response = httpx.get(url)
-            if response.status_code != 200:
-                continue
-                
-            data = response.json()
-            events = data.get("events", [])
-            
-            for event in events:
-                event_id = event.get("id")
-                espn_state = event.get("status", {}).get("type", {}).get("state", "pre")
-                
-                if espn_state != "post":
-                    continue
-                    
-                competitions = event.get("competitions", [])
-                if not competitions:
-                    continue
-                    
-                competitors = competitions[0].get("competitors", [])
-                if len(competitors) < 2:
-                    continue
-                
-                goles_local = None
-                goles_visitante = None
-                
-                for comp in competitors:
-                    role = comp.get("homeAway")
-                    score_str = comp.get("score")
-                    
-                    if role == "home" and score_str is not None:
-                        goles_local = int(score_str)
-                    elif role == "away" and score_str is not None:
-                        goles_visitante = int(score_str)
-
-                if goles_local is None or goles_visitante is None:
-                    continue
-
-                res_match = supabase.table("partidos").select("*").eq("espn_event_id", event_id).execute()
-                if not res_match.data:
-                    continue
-                    
-                db_match = res_match.data[0]
-                
-                necesita_actualizacion = (
-                    db_match["estado"] != "finalizado" or
-                    db_match["goles_local"] != goles_local or
-                    db_match["goles_visitante"] != goles_visitante
-                )
-                
-                if necesita_actualizacion:
-                    supabase.table("partidos").update({
-                        "goles_local": goles_local,
-                        "goles_visitante": goles_visitante,
-                        "estado": "finalizado"
-                    }).eq("id", db_match["id"]).execute()
-                    
-                    res_preds = supabase.table("predicciones").select("*").eq("partido_id", db_match["id"]).execute()
-                    preds = res_preds.data or []
-                    
-                    for pred in preds:
-                        puntos = calcular_puntos(
-                            pred_local=pred["pred_local"],
-                            pred_visitante=pred["pred_visitante"],
-                            real_local=goles_local,
-                            real_visitante=goles_visitante,
-                            fase=db_match["fase"]
-                        )
-                        supabase.table("predicciones").update({
-                            "puntos_obtenidos": puntos
-                        }).eq("id", pred["id"]).execute()
-                        total_recalculados += 1
-                        
-                    partidos_actualizados.append({
-                        "partido": f"{db_match['equipo_local']} vs {db_match['equipo_visitante']}",
-                        "goles": f"{goles_local}-{goles_visitante}",
-                        "predicciones_actualizadas": len(preds)
-                    })
-                    
-        return {
-            "status": "success",
-            "partidos_actualizados": partidos_actualizados,
-            "total_predicciones_recalculadas": total_recalculados
-        }
+        return _sincronizar_fechas(dates_to_sync)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error en la sincronización manual: {str(e)}")
