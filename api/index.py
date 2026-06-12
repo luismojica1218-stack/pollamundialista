@@ -275,8 +275,13 @@ async def save_prediccion(input_data: PredictionInput, user=Depends(get_current_
             "actualizado_en": datetime.now(timezone.utc).isoformat()
         }
         
-        # Guardar predicción
-        res_pred = supabase.table("predicciones").upsert(payload).execute()
+        # Guardar predicción.
+        # on_conflict="usuario_id,partido_id" => si ya existe una predicción de
+        # ese usuario para ese partido, la ACTUALIZA en sitio (edición) en vez de
+        # intentar insertar y chocar con la restricción única.
+        res_pred = supabase.table("predicciones").upsert(
+            payload, on_conflict="usuario_id,partido_id"
+        ).execute()
         return res_pred.data[0] if res_pred.data else {"status": "saved"}
         
     except HTTPException as he:
