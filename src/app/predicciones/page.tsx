@@ -5,7 +5,7 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import NavBar from '@/components/NavBar';
 import CountryFlag from '@/components/CountryFlag';
 import { useAuth } from '@/context/AuthContext';
-import { CalendarDays, Save, CheckCircle2, XCircle, Clock, Trophy, Lock } from 'lucide-react';
+import { CalendarDays, Save, CheckCircle2, XCircle, Clock, Trophy, Lock, ChevronDown, History } from 'lucide-react';
 
 interface Partido {
   id: number;
@@ -60,6 +60,7 @@ export default function PrediccionesPage() {
   const [loading, setLoading] = useState(true);
   const [faseFilter, setFaseFilter] = useState<string>('todas');
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
+  const [showClosed, setShowClosed] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
@@ -168,15 +169,200 @@ export default function PrediccionesPage() {
   const totalPts = Object.values(predicciones).reduce((s, p) => s + (p.puntos_obtenidos || 0), 0);
   const hechas = Object.keys(predicciones).length;
 
-  const groupedPartidos: { [dateStr: string]: Partido[] } = {};
-  filteredPartidos.forEach((p) => {
-    const localDate = new Date(p.inicio_utc).toLocaleDateString('es-ES', {
-      weekday: 'long', day: 'numeric', month: 'long',
+  // Split: "activos" = aún no finalizados (hoy + futuro), arriba en orden cronológico.
+  //        "cerrados" = ya finalizados, en sub-módulo, más recientes primero.
+  const activos = filteredPartidos
+    .filter((p) => p.estado !== 'finalizado')
+    .sort((a, b) => new Date(a.inicio_utc).getTime() - new Date(b.inicio_utc).getTime());
+  const cerrados = filteredPartidos
+    .filter((p) => p.estado === 'finalizado')
+    .sort((a, b) => new Date(b.inicio_utc).getTime() - new Date(a.inicio_utc).getTime());
+
+  const agruparPorDia = (lista: Partido[]) => {
+    const grupos: { [dateStr: string]: Partido[] } = {};
+    lista.forEach((p) => {
+      const localDate = new Date(p.inicio_utc).toLocaleDateString('es-ES', {
+        weekday: 'long', day: 'numeric', month: 'long',
+      });
+      const capitalized = localDate.charAt(0).toUpperCase() + localDate.slice(1);
+      if (!grupos[capitalized]) grupos[capitalized] = [];
+      grupos[capitalized].push(p);
     });
-    const capitalized = localDate.charAt(0).toUpperCase() + localDate.slice(1);
-    if (!groupedPartidos[capitalized]) groupedPartidos[capitalized] = [];
-    groupedPartidos[capitalized].push(p);
-  });
+    return grupos;
+  };
+
+  const groupedActivos = agruparPorDia(activos);
+  const groupedCerrados = agruparPorDia(cerrados);
+
+  // Renderiza un día (encabezado + tarjetas). Se reutiliza en ambas secciones.
+  const renderDia = (dateStr: string, datePartidos: Partido[]) => (
+    <div key={dateStr} className="space-y-3">
+      <div className="flex items-center gap-3">
+        <h3 className="text-xs font-bold tracking-widest uppercase text-slate-400 font-display">
+          {dateStr}
+        </h3>
+        <div className="flex-1 h-px bg-slate-200" />
+        <span className="text-xs font-semibold text-slate-400">
+          {datePartidos.length} partido{datePartidos.length !== 1 ? 's' : ''}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {datePartidos.map((partido) => {
+          const dl = getDeadlineInfo(partido.inicio_utc);
+          const isClosed = partido.cerrado || dl.closed;
+          const pred = predicciones[partido.id];
+          const localVal = localScores[partido.id]?.local ?? '';
+          const visitanteVal = localScores[partido.id]?.visitante ?? '';
+          const saving = savingStates[partido.id] || 'idle';
+          const fase = FASE_STYLES[partido.fase] || FASE_STYLES.grupos;
+          const enJuego = partido.estado === 'en_juego';
+          const finalizado = partido.estado === 'finalizado';
+
+          const isModified = pred
+            ? pred.pred_local.toString() !== localVal || pred.pred_visitante.toString() !== visitanteVal
+            : localVal !== '' && visitanteVal !== '';
+
+          const localTimeStr = new Date(partido.inicio_utc).toLocaleTimeString('es-ES', {
+            hour: '2-digit', minute: '2-digit',
+          });
+
+          const ScoreController = ({ team, value }: { team: 'local' | 'visitante'; value: string }) => {
+            const step = (amount: number) => {
+              let current = parseInt(value, 10);
+              if (isNaN(current)) current = 0;
+              handleScoreChange(partido.id, team, Math.max(0, current + amount).toString());
+            };
+            return (
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button" disabled={isClosed} onClick={() => step(-1)}
+                  className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-500 disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center text-lg font-bold select-none cursor-pointer"
+                >−</button>
+                <input
+                  type="text" inputMode="numeric" maxLength={2} disabled={isClosed} value={value}
+                  onChange={(e) => handleScoreChange(partido.id, team, e.target.value)}
+                  className={`w-11 h-11 text-center font-extrabold text-lg rounded-xl border-2 transition-all focus:outline-none focus:ring-4 focus:ring-emerald-500/15 ${
+                    isClosed
+                      ? 'border-slate-200 bg-slate-50 text-slate-400'
+                      : isModified
+                      ? 'border-emerald-500 text-emerald-700 bg-emerald-50/40'
+                      : 'border-slate-200 text-slate-900 bg-white'
+                  }`}
+                  placeholder="–"
+                />
+                <button
+                  type="button" disabled={isClosed} onClick={() => step(1)}
+                  className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-500 disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center text-lg font-bold select-none cursor-pointer"
+                >+</button>
+              </div>
+            );
+          };
+
+          return (
+            <div
+              key={partido.id}
+              className={`card card-hover relative overflow-hidden rounded-2xl p-5 ${isClosed ? 'opacity-95' : ''}`}
+            >
+              {/* phase color bar */}
+              <div className={`absolute left-0 top-0 h-full w-1 ${fase.bar}`} />
+
+              {/* Top row */}
+              <div className="flex items-center justify-between mb-4 pl-1">
+                <span className={`text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${fase.chip}`}>
+                  {FASE_NAMES[partido.fase]} · {localTimeStr}
+                </span>
+                {enJuego ? (
+                  <span className="flex items-center gap-1.5 text-xs font-bold text-rose-600">
+                    <span className="h-2 w-2 rounded-full bg-rose-500 live-dot" /> EN VIVO
+                  </span>
+                ) : (
+                  <span className={`flex items-center gap-1 text-xs font-semibold ${isClosed ? 'text-slate-400' : 'text-slate-500'}`}>
+                    {isClosed ? <Lock className="h-3.5 w-3.5" /> : <Clock className="h-3.5 w-3.5" />}
+                    {dl.text}
+                  </span>
+                )}
+              </div>
+
+              {/* Teams + score */}
+              <div className="flex items-center gap-3 pl-1">
+                <div className="flex-1 min-w-0 flex items-center justify-end gap-2">
+                  <span className="font-bold text-slate-900 block text-[15px] truncate">{partido.equipo_local}</span>
+                  <CountryFlag teamName={partido.equipo_local} />
+                </div>
+                <ScoreController team="local" value={localVal} />
+                <span className="text-slate-300 font-bold">:</span>
+                <ScoreController team="visitante" value={visitanteVal} />
+                <div className="flex-1 min-w-0 flex items-center justify-start gap-2">
+                  <CountryFlag teamName={partido.equipo_visitante} />
+                  <span className="font-bold text-slate-900 block text-[15px] truncate">{partido.equipo_visitante}</span>
+                </div>
+              </div>
+
+              {/* Bottom row */}
+              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs pl-1 min-h-[34px]">
+                <div>
+                  {finalizado ? (
+                    <span className="flex items-center gap-1.5 text-slate-500">
+                      Resultado:
+                      <span className="font-extrabold text-slate-900 bg-slate-100 px-2 py-0.5 rounded-md">
+                        {partido.goles_local} – {partido.goles_visitante}
+                      </span>
+                    </span>
+                  ) : enJuego ? (
+                    <span className="font-semibold text-rose-600">
+                      {partido.goles_local ?? 0} – {partido.goles_visitante ?? 0} (en juego)
+                    </span>
+                  ) : (
+                    <span className="text-slate-400">Aún sin jugar</span>
+                  )}
+                </div>
+
+                <div>
+                  {isClosed ? (
+                    pred && finalizado && (
+                      <div className="flex items-center gap-1.5 text-emerald-700 font-bold bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100">
+                        <Trophy className="h-3.5 w-3.5" />
+                        +{pred.puntos_obtenidos} pts
+                      </div>
+                    )
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      {saving === 'saving' && (
+                        <span className="text-slate-400 flex items-center gap-1 text-xs">
+                          <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-300 border-t-transparent" />
+                          Guardando
+                        </span>
+                      )}
+                      {((saving === 'saved' || pred) && !isModified && saving !== 'saving') && (
+                        <span className="text-emerald-600 flex items-center gap-1 font-bold text-xs bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-100 shadow-sm">
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Guardado
+                        </span>
+                      )}
+                      {saving === 'error' && (
+                        <span className="text-rose-500 flex items-center gap-1 font-semibold">
+                          <XCircle className="h-4 w-4" /> Error
+                        </span>
+                      )}
+                      {isModified && (
+                        <button
+                          onClick={() => handleSave(partido.id)}
+                          disabled={saving === 'saving' || localVal === '' || visitanteVal === ''}
+                          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition-colors shadow-md shadow-emerald-600/20 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                        >
+                          <Save className="h-3.5 w-3.5" /> Guardar
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 
   return (
     <ProtectedRoute>
@@ -255,174 +441,47 @@ export default function PrediccionesPage() {
             </div>
           ) : (
             <div className="space-y-9">
-              {Object.entries(groupedPartidos).map(([dateStr, datePartidos]) => (
-                <div key={dateStr} className="space-y-3">
-                  <div className="flex items-center gap-3">
-                    <h3 className="text-xs font-bold tracking-widest uppercase text-slate-400 font-display">
-                      {dateStr}
-                    </h3>
-                    <div className="flex-1 h-px bg-slate-200" />
-                    <span className="text-xs font-semibold text-slate-400">
-                      {datePartidos.length} partido{datePartidos.length !== 1 ? 's' : ''}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    {datePartidos.map((partido) => {
-                      const dl = getDeadlineInfo(partido.inicio_utc);
-                      const isClosed = partido.cerrado || dl.closed;
-                      const pred = predicciones[partido.id];
-                      const localVal = localScores[partido.id]?.local ?? '';
-                      const visitanteVal = localScores[partido.id]?.visitante ?? '';
-                      const saving = savingStates[partido.id] || 'idle';
-                      const fase = FASE_STYLES[partido.fase] || FASE_STYLES.grupos;
-                      const enJuego = partido.estado === 'en_juego';
-                      const finalizado = partido.estado === 'finalizado';
-
-                      const isModified = pred
-                        ? pred.pred_local.toString() !== localVal || pred.pred_visitante.toString() !== visitanteVal
-                        : localVal !== '' && visitanteVal !== '';
-
-                      const localTimeStr = new Date(partido.inicio_utc).toLocaleTimeString('es-ES', {
-                        hour: '2-digit', minute: '2-digit',
-                      });
-
-                      const ScoreController = ({ team, value }: { team: 'local' | 'visitante'; value: string }) => {
-                        const step = (amount: number) => {
-                          let current = parseInt(value, 10);
-                          if (isNaN(current)) current = 0;
-                          handleScoreChange(partido.id, team, Math.max(0, current + amount).toString());
-                        };
-                        return (
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <button
-                              type="button" disabled={isClosed} onClick={() => step(-1)}
-                              className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-500 disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center text-lg font-bold select-none cursor-pointer"
-                            >−</button>
-                            <input
-                              type="text" inputMode="numeric" maxLength={2} disabled={isClosed} value={value}
-                              onChange={(e) => handleScoreChange(partido.id, team, e.target.value)}
-                              className={`w-11 h-11 text-center font-extrabold text-lg rounded-xl border-2 transition-all focus:outline-none focus:ring-4 focus:ring-emerald-500/15 ${
-                                isClosed
-                                  ? 'border-slate-200 bg-slate-50 text-slate-400'
-                                  : isModified
-                                  ? 'border-emerald-500 text-emerald-700 bg-emerald-50/40'
-                                  : 'border-slate-200 text-slate-900 bg-white'
-                              }`}
-                              placeholder="–"
-                            />
-                            <button
-                              type="button" disabled={isClosed} onClick={() => step(1)}
-                              className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-500 disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center text-lg font-bold select-none cursor-pointer"
-                            >+</button>
-                          </div>
-                        );
-                      };
-
-                      return (
-                        <div
-                          key={partido.id}
-                          className={`card card-hover relative overflow-hidden rounded-2xl p-5 ${isClosed ? 'opacity-95' : ''}`}
-                        >
-                          {/* phase color bar */}
-                          <div className={`absolute left-0 top-0 h-full w-1 ${fase.bar}`} />
-
-                          {/* Top row */}
-                          <div className="flex items-center justify-between mb-4 pl-1">
-                            <span className={`text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${fase.chip}`}>
-                              {FASE_NAMES[partido.fase]} · {localTimeStr}
-                            </span>
-                            {enJuego ? (
-                              <span className="flex items-center gap-1.5 text-xs font-bold text-rose-600">
-                                <span className="h-2 w-2 rounded-full bg-rose-500 live-dot" /> EN VIVO
-                              </span>
-                            ) : (
-                              <span className={`flex items-center gap-1 text-xs font-semibold ${isClosed ? 'text-slate-400' : 'text-slate-500'}`}>
-                                {isClosed ? <Lock className="h-3.5 w-3.5" /> : <Clock className="h-3.5 w-3.5" />}
-                                {dl.text}
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Teams + score */}
-                          <div className="flex items-center gap-3 pl-1">
-                            <div className="flex-1 min-w-0 flex items-center justify-end gap-2">
-                              <span className="font-bold text-slate-900 block text-[15px] truncate">{partido.equipo_local}</span>
-                              <CountryFlag teamName={partido.equipo_local} />
-                            </div>
-                            <ScoreController team="local" value={localVal} />
-                            <span className="text-slate-300 font-bold">:</span>
-                            <ScoreController team="visitante" value={visitanteVal} />
-                            <div className="flex-1 min-w-0 flex items-center justify-start gap-2">
-                              <CountryFlag teamName={partido.equipo_visitante} />
-                              <span className="font-bold text-slate-900 block text-[15px] truncate">{partido.equipo_visitante}</span>
-                            </div>
-                          </div>
-
-                          {/* Bottom row */}
-                          <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs pl-1 min-h-[34px]">
-                            <div>
-                              {finalizado ? (
-                                <span className="flex items-center gap-1.5 text-slate-500">
-                                  Resultado:
-                                  <span className="font-extrabold text-slate-900 bg-slate-100 px-2 py-0.5 rounded-md">
-                                    {partido.goles_local} – {partido.goles_visitante}
-                                  </span>
-                                </span>
-                              ) : enJuego ? (
-                                <span className="font-semibold text-rose-600">
-                                  {partido.goles_local ?? 0} – {partido.goles_visitante ?? 0} (en juego)
-                                </span>
-                              ) : (
-                                <span className="text-slate-400">Aún sin jugar</span>
-                              )}
-                            </div>
-
-                            <div>
-                              {isClosed ? (
-                                pred && finalizado && (
-                                  <div className="flex items-center gap-1.5 text-emerald-700 font-bold bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100">
-                                    <Trophy className="h-3.5 w-3.5" />
-                                    +{pred.puntos_obtenidos} pts
-                                  </div>
-                                )
-                              ) : (
-                                <div className="flex items-center gap-2">
-                                  {saving === 'saving' && (
-                                    <span className="text-slate-400 flex items-center gap-1 text-xs">
-                                      <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-300 border-t-transparent" />
-                                      Guardando
-                                    </span>
-                                  )}
-                                  {((saving === 'saved' || pred) && !isModified && saving !== 'saving') && (
-                                    <span className="text-emerald-600 flex items-center gap-1 font-bold text-xs bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-100 shadow-sm">
-                                      <CheckCircle2 className="h-3.5 w-3.5" /> Guardado
-                                    </span>
-                                  )}
-                                  {saving === 'error' && (
-                                    <span className="text-rose-500 flex items-center gap-1 font-semibold">
-                                      <XCircle className="h-4 w-4" /> Error
-                                    </span>
-                                  )}
-                                  {isModified && (
-                                    <button
-                                      onClick={() => handleSave(partido.id)}
-                                      disabled={saving === 'saving' || localVal === '' || visitanteVal === ''}
-                                      className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition-colors shadow-md shadow-emerald-600/20 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                                    >
-                                      <Save className="h-3.5 w-3.5" /> Guardar
-                                    </button>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+              {/* Próximos / abiertos */}
+              {activos.length > 0 ? (
+                Object.entries(groupedActivos).map(([dateStr, datePartidos]) => renderDia(dateStr, datePartidos))
+              ) : (
+                <div className="card rounded-2xl p-8 text-center">
+                  <p className="text-sm text-slate-500">
+                    No hay partidos próximos por predecir en esta vista. Revisa tus predicciones cerradas más abajo.
+                  </p>
                 </div>
-              ))}
+              )}
+
+              {/* Sub-módulo: predicciones cerradas (finalizadas), colapsable */}
+              {cerrados.length > 0 && (
+                <div className="pt-2">
+                  <button
+                    onClick={() => setShowClosed((v) => !v)}
+                    className="w-full flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left hover:border-slate-300 transition-colors cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
+                        <History className="h-4 w-4" />
+                      </span>
+                      <span className="font-bold text-slate-700 font-display">
+                        Predicciones cerradas
+                      </span>
+                      <span className="text-xs font-bold text-slate-500 bg-slate-100 rounded-full px-2 py-0.5">
+                        {cerrados.length}
+                      </span>
+                    </span>
+                    <ChevronDown
+                      className={`h-5 w-5 text-slate-400 transition-transform ${showClosed ? 'rotate-180' : ''}`}
+                    />
+                  </button>
+
+                  {showClosed && (
+                    <div className="mt-5 space-y-9">
+                      {Object.entries(groupedCerrados).map(([dateStr, datePartidos]) => renderDia(dateStr, datePartidos))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </main>
