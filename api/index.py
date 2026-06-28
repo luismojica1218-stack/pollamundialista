@@ -366,6 +366,22 @@ def _derivar_fase(event: dict) -> Optional[str]:
     return FASE_MAPPING.get(slug)
 
 
+# Textos que ESPN usa como "placeholder" mientras no hay selección real asignada
+# en un cruce de eliminatorias (p.ej. "Group C Winner", "Third Place Group...",
+# "Round of 32 1 Winner", "Quarterfinal 2 Winner", "Semifinal 1 Loser", "TBD").
+_PLACEHOLDER_TOKENS = (
+    "group ", "winner", "2nd place", "third place", "round of",
+    "quarterfinal", "semifinal", "loser", "tbd", "place group",
+)
+
+
+def _es_placeholder(nombre: Optional[str]) -> bool:
+    if not nombre:
+        return True
+    n = nombre.strip().lower()
+    return any(tok in n for tok in _PLACEHOLDER_TOKENS)
+
+
 def _sincronizar_fechas(dates_to_sync: list) -> dict:
     """
     Sincroniza partidos con ESPN para las fechas dadas.
@@ -481,10 +497,15 @@ def _sincronizar_fechas(dates_to_sync: list) -> dict:
                 continue  # ya cerrado: no lo perturbamos
 
             cambios = {}
+            # Solo actualizamos el nombre del equipo si el que llega de ESPN es
+            # un equipo REAL, o si el que tenemos guardado también es placeholder.
+            # Así nunca pisamos una selección ya confirmada con un "Group X Winner".
             if home_team and home_team != db_match["equipo_local"]:
-                cambios["equipo_local"] = home_team
+                if not _es_placeholder(home_team) or _es_placeholder(db_match["equipo_local"]):
+                    cambios["equipo_local"] = home_team
             if away_team and away_team != db_match["equipo_visitante"]:
-                cambios["equipo_visitante"] = away_team
+                if not _es_placeholder(away_team) or _es_placeholder(db_match["equipo_visitante"]):
+                    cambios["equipo_visitante"] = away_team
             fase_actual = _derivar_fase(event)
             if fase_actual and fase_actual != db_match["fase"]:
                 cambios["fase"] = fase_actual
