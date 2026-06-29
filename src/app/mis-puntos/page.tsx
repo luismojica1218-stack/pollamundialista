@@ -189,7 +189,7 @@ export default function MisPuntosPage() {
                             <div className="flex items-center gap-2 text-sm sm:text-base">
                               <span className="font-semibold text-white truncate">{partido.equipo_local}</span>
                               <CountryFlag teamName={partido.equipo_local} />
-                              <span className="text-teal-700 font-bold bg-teal-100 px-2 py-0.5 rounded border border-teal-200 mx-1">
+                              <span className="text-emerald-800 font-bold bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200 mx-1">
                                 {partido.goles_local} – {partido.goles_visitante}
                               </span>
                               <CountryFlag teamName={partido.equipo_visitante} />
@@ -216,7 +216,7 @@ export default function MisPuntosPage() {
                             <div className="flex items-center justify-center shrink-0">
                               <span className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-bold font-display ${
                                 points > 0
-                                  ? 'bg-teal-100 border border-teal-200 text-teal-700'
+                                  ? 'bg-emerald-100 border border-emerald-200 text-emerald-800'
                                   : 'bg-slate-900 border border-slate-800 text-slate-500'
                               }`}>
                                 <Trophy className="h-4 w-4 shrink-0" />
